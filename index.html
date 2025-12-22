@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Group Voice Call (Firebase)</title>
+  <style>
+    body {
+      background: #0f172a;
+      color: white;
+      font-family: Arial;
+      text-align: center;
+    }
+    button, input {
+      padding: 10px;
+      margin: 5px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+
+<body>
+<h2>🎧 Group Voice Call (WebRTC + Firebase)</h2>
+
+<input id="roomId" placeholder="Room ID">
+<br>
+
+<button onclick="joinRoom()">Join Voice Call</button>
+<button onclick="leaveRoom()">Leave</button>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+  import {
+    getFirestore, doc, setDoc, getDocs, onSnapshot,
+    collection, addDoc, deleteDoc
+  } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBRbfuMB_J7ADzWYcnI2UmUmTuLYoY3G6Q",
+    authDomain: "webrtc-a3cd5.firebaseapp.com",
+    projectId: "webrtc-a3cd5",
+    storageBucket: "webrtc-a3cd5.firebasestorage.app",
+    messagingSenderId: "203007627814",
+    appId: "1:203007627814:web:a947bb1227f5e390f78ce7"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const userId = crypto.randomUUID();
+  let localStream;
+  let peers = {}; // peerId -> RTCPeerConnection
+
+  const iceServers = {
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  };
+
+  async function getAudio() {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: false
+    });
+  }
+
+  async function createPeer(roomId, peerId, isCaller) {
+    const pc = new RTCPeerConnection(iceServers);
+    peers[peerId] = pc;
+
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+    pc.ontrack = e => {
+      const audio = document.createElement("audio");
+      audio.srcObject = e.streams[0];
+      audio.autoplay = true;
+      document.body.appendChild(audio);
+    };
+
+    const connRef = collection(
+      db,
+      "rooms", roomId,
+      "participants", userId,
+      "connections", peerId,
+      "candidates"
+    );
+
+    pc.onicecandidate = e => e.candidate && addDoc(connRef, e.candidate.toJSON());
+
+    if (isCaller) {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      await setDoc(
+        doc(db, "rooms", roomId, "participants", peerId, "connections", userId),
+        { offer }
+      );
+    }
+
+    onSnapshot(
+      collection(db, "rooms", roomId, "participants", peerId, "connections", userId, "candidates"),
+      snap => snap.docChanges().forEach(c =>
+        pc.addIceCandidate(c.doc.data())
+      )
+    );
+
+    onSnapshot(
+      doc(db, "rooms", roomId, "participants", userId, "connections", peerId),
+      async snap => {
+        const data = snap.data();
+        if (data?.offer && !pc.currentRemoteDescription) {
+          await pc.setRemoteDescription(data.offer);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await setDoc(snap.ref, { answer }, { merge: true });
+        }
+        if (data?.answer && !pc.currentRemoteDescription) {
+          await pc.setRemoteDescription(data.answer);
+        }
+      }
+    );
+  }
+
+  window.joinRoom = async () => {
+    const roomId = document.getElementById("roomId").value;
+    if (!roomId) return alert("Enter room ID");
+
+    await getAudio();
+
+    const participantsRef = collection(db, "rooms", roomId, "participants");
+    await setDoc(doc(participantsRef, userId), { joined: Date.now() });
+
+    const snapshot = await getDocs(participantsRef);
+    snapshot.forEach(p => {
+      if (p.id !== userId) createPeer(roomId, p.id, true);
+    });
+
+    onSnapshot(participantsRef, snap => {
+      snap.docChanges().forEach(c => {
+        if (c.type === "added" && c.doc.id !== userId) {
+          createPeer(roomId, c.doc.id, false);
+        }
+      });
+    });
+  };
+
+  window.leaveRoom = async () => {
+    Object.values(peers).forEach(p => p.close());
+    localStream?.getTracks().forEach(t => t.stop());
+    peers = {};
+  };
+</script>
+</body>
+</html>
