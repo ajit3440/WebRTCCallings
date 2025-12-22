@@ -44,7 +44,8 @@ function initWebSocket() {
         break;
 
       case 'incoming-call':
-        if (confirm(`Incoming call from ${message.from}. Accept?`)) {
+        const sanitizedFrom = String(message.from).replace(/[<>&"']/g, '');
+        if (confirm(`Incoming call from ${sanitizedFrom}. Accept?`)) {
           await handleIncomingCall(message.from);
         }
         break;
@@ -75,7 +76,7 @@ function initWebSocket() {
 
 // Generate random ID
 function generateId() {
-  return Math.random().toString(36).substr(2, 9);
+  return Math.random().toString(36).substring(2, 11);
 }
 
 // Update status message
@@ -150,7 +151,7 @@ function createPeerConnection(peerId) {
 async function makeCall() {
   const peerId = peerIdInput.value.trim();
   if (!peerId) {
-    alert('Please enter a peer ID');
+    updateStatus('Please enter a peer ID', 'error');
     return;
   }
 

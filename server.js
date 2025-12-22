@@ -29,7 +29,7 @@ const server = http.createServer((req, res) => {
         res.end('<h1>404 - File Not Found</h1>', 'utf-8');
       } else {
         res.writeHead(500);
-        res.end('Server Error: ' + error.code, 'utf-8');
+        res.end('Internal Server Error', 'utf-8');
       }
     } else {
       res.writeHead(200, { 'Content-Type': contentType });
@@ -49,6 +49,10 @@ wss.on('connection', (ws) => {
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
+      
+      if (!data || typeof data.type !== 'string') {
+        return;
+      }
 
       switch (data.type) {
         case 'register':
