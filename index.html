@@ -301,7 +301,7 @@
                         pc.addTrack(videoTrack, screenStream);
                         
                         // Renegotiate
-                        const offer = await pc.createOffer();A
+                        const offer = await pc.createOffer();
                         await pc.setLocalDescription(offer);
                         const myConnRef = doc(
                             db, "rooms", currentRoomId, "participants",
@@ -321,7 +321,18 @@
                     document.getElementById("status").textContent = "Sharing screen...";
                 } catch (err) {
                     console.error("Error sharing screen:", err);
-                    alert("Could not share screen");
+                    let errorMsg = "Could not share screen. ";
+                    if (err.name === "NotAllowedError") {
+                        errorMsg += "Permission denied.";
+                    } else if (err.name === "NotSupportedError") {
+                        errorMsg += "Screen sharing not supported. Use HTTPS or localhost.";
+                    } else if (err.name === "NotFoundError") {
+                        errorMsg += "No screen available to share.";
+                    } else {
+                        errorMsg += err.message || "Unknown error.";
+                    }
+                    alert(errorMsg);
+                    document.getElementById("status").textContent = errorMsg;
                 }
             }
         }
