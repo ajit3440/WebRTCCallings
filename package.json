@@ -1,0 +1,22 @@
+{
+  "name": "webrtc-callings",
+  "version": "1.0.0",
+  "description": "Testing calling functions with WebRTC",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "webrtc",
+    "calling",
+    "video",
+    "audio",
+    "peer-to-peer"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
