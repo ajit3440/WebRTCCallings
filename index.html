@@ -11,6 +11,8 @@
 
     <input id="roomId" placeholder="Room ID">
     <button id="join">Join</button>
+    <button id="leave" style="display:none;">Leave Call</button>
+    <div id="status"></div>
 
     <script type="module">
         import { initializeApp } from
@@ -44,6 +46,8 @@
         const userId = crypto.randomUUID();
         let localStream;
         let peers = {};
+        let currentRoomId = null;
+        let unsubscribers = [];
 
         const servers = {
             iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -54,22 +58,41 @@
             if (!roomId) return alert("Enter Room ID");
 
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            currentRoomId = roomId;
+            
+            document.getElementById("join").style.display = "none";
+            document.getElementById("leave").style.display = "inline";
+            document.getElementById("roomId").disabled = true;
+            document.getElementById("status").textContent = "Connected to room: " + roomId;
 
             const participantsRef = collection(db, "rooms", roomId, "participants");
             await setDoc(doc(participantsRef, userId), { joined: Date.now() });
 
             const snapshot = await getDocs(participantsRef);
             snapshot.forEach(p => {
-                if (p.id !== userId) connect(roomId, p.id, true);
+                const data = p.data();
+                if (p.id !== userId && !data.left) {
+                    connect(roomId, p.id, true);
+                }
             });
 
-            onSnapshot(participantsRef, snap => {
+            const unsubscribe = onSnapshot(participantsRef, snap => {
                 snap.docChanges().forEach(c => {
-                    if (c.type === "added" && c.doc.id !== userId) {
+                    if (c.type === "added" && c.doc.id !== userId && !c.doc.data().left) {
                         connect(roomId, c.doc.id, false);
+                    }
+                    if (c.type === "modified" && c.doc.data().left && peers[c.doc.id]) {
+                        // Peer left, clean up their connection
+                        peers[c.doc.id].close();
+                        delete peers[c.doc.id];
+                        // Remove their audio element
+                        document.querySelectorAll("audio").forEach(audio => {
+                            if (audio.id === c.doc.id) audio.remove();
+                        });
                     }
                 });
             });
+            unsubscribers.push(unsubscribe);
         }
 
         async function connect(roomId, peerId, caller) {
@@ -82,6 +105,7 @@
                 const audio = document.createElement("audio");
                 audio.srcObject = e.streams[0];
                 audio.autoplay = true;
+                audio.id = peerId;
                 document.body.appendChild(audio);
             };
 
@@ -133,11 +157,15 @@
 
             onSnapshot(peerCandRef, snap => {
                 snap.docChanges().forEach(c => {
-                    const candidate = new RTCIceCandidate(c.doc.data());
-                    if (pc.currentRemoteDescription) {
-                        pc.addIceCandidate(candidate);
-                    } else {
-                        candidateQueue.push(candidate);
+                    try {
+                        const candidate = new RTCIceCandidate(c.doc.data());
+                        if (pc.currentRemoteDescription) {
+                            pc.addIceCandidate(candidate);
+                        } else {
+                            candidateQueue.push(candidate);
+                        }
+                    } catch (e) {
+                        console.error("Error adding ICE candidate:", e);
                     }
                 });
             });
@@ -149,7 +177,41 @@
             }
         }
 
+        async function leaveRoom() {
+            if (!currentRoomId) return;
+
+            // Unsubscribe from all Firebase listeners
+            unsubscribers.forEach(unsub => unsub());
+            unsubscribers = [];
+
+            // Stop local stream
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+
+            // Close all peer connections
+            Object.values(peers).forEach(pc => pc.close());
+            peers = {};
+
+            // Remove from Firebase
+            const participantsRef = collection(db, "rooms", currentRoomId, "participants");
+            await setDoc(doc(participantsRef, userId), { left: Date.now() }, { merge: true });
+
+            // Remove all audio elements
+            document.querySelectorAll("audio").forEach(audio => audio.remove());
+
+            // Reset UI
+            document.getElementById("join").style.display = "inline";
+            document.getElementById("leave").style.display = "none";
+            document.getElementById("roomId").disabled = false;
+            document.getElementById("status").textContent = "Left the call";
+            
+            currentRoomId = null;
+        }
+
         document.getElementById("join").onclick = joinRoom;
+        document.getElementById("leave").onclick = leaveRoom;
     </script>
 </body>
 </html>
