@@ -12,7 +12,9 @@
     <input id="roomId" placeholder="Room ID">
     <button id="join">Join</button>
     <button id="leave" style="display:none;">Leave Call</button>
+    <button id="shareScreen" style="display:none;">Share Screen</button>
     <div id="status"></div>
+    <div id="videos" style="display:flex; flex-wrap:wrap; gap:10px; margin-top:20px;"></div>
 
     <script type="module">
         import { initializeApp } from
@@ -45,6 +47,7 @@
 
         const userId = crypto.randomUUID();
         let localStream;
+        let screenStream;
         let peers = {};
         let currentRoomId = null;
         let unsubscribers = [];
@@ -62,6 +65,7 @@
             
             document.getElementById("join").style.display = "none";
             document.getElementById("leave").style.display = "inline";
+            document.getElementById("shareScreen").style.display = "inline";
             document.getElementById("roomId").disabled = true;
             document.getElementById("status").textContent = "Connected to room: " + roomId;
 
@@ -83,12 +87,16 @@
                     }
                     if (c.type === "modified" && c.doc.data().left && peers[c.doc.id]) {
                         // Peer left, clean up their connection
+                        if (peers[c.doc.id].unsubscribers) {
+                            peers[c.doc.id].unsubscribers.forEach(unsub => unsub());
+                        }
                         peers[c.doc.id].close();
                         delete peers[c.doc.id];
-                        // Remove their audio element
-                        document.querySelectorAll("audio").forEach(audio => {
-                            if (audio.id === c.doc.id) audio.remove();
-                        });
+                        // Remove their audio and video elements
+                        const audio = document.getElementById("audio-" + c.doc.id);
+                        const video = document.getElementById("video-" + c.doc.id);
+                        if (audio) audio.remove();
+                        if (video) video.remove();
                     }
                 });
             });
@@ -98,15 +106,42 @@
         async function connect(roomId, peerId, caller) {
             const pc = new RTCPeerConnection(servers);
             peers[peerId] = pc;
+            peers[peerId].unsubscribers = [];
 
             localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+            if (screenStream) {
+                screenStream.getTracks().forEach(t => pc.addTrack(t, screenStream));
+            }
 
             pc.ontrack = e => {
-                const audio = document.createElement("audio");
-                audio.srcObject = e.streams[0];
-                audio.autoplay = true;
-                audio.id = peerId;
-                document.body.appendChild(audio);
+                const stream = e.streams[0];
+                const trackKind = e.track.kind;
+                
+                if (trackKind === "video") {
+                    // Display screen share
+                    let video = document.getElementById("video-" + peerId);
+                    if (!video) {
+                        video = document.createElement("video");
+                        video.id = "video-" + peerId;
+                        video.autoplay = true;
+                        video.style.width = "400px";
+                        video.style.border = "2px solid #333";
+                        document.getElementById("videos").appendChild(video);
+                    }
+                    video.srcObject = stream;
+                } else if (trackKind === "audio") {
+                    // Audio track
+                    let audio = document.getElementById("audio-" + peerId);
+                    if (!audio) {
+                        audio = document.createElement("audio");
+                        audio.id = "audio-" + peerId;
+                        audio.autoplay = true;
+                        document.body.appendChild(audio);
+                    }
+                    if (!audio.srcObject) {
+                        audio.srcObject = stream;
+                    }
+                }
             };
 
             // My outgoing candidates
@@ -136,7 +171,7 @@
             // Queue for candidates that arrive before remote description
             const candidateQueue = [];
 
-            onSnapshot(peerConnRef, async snap => {
+            const peerUnsubscribe = onSnapshot(peerConnRef, async snap => {
                 const data = snap.data();
                 if (data?.offer && !pc.currentRemoteDescription) {
                     await pc.setRemoteDescription(data.offer);
@@ -154,8 +189,9 @@
                     candidateQueue.length = 0;
                 }
             });
+            peers[peerId].unsubscribers.push(peerUnsubscribe);
 
-            onSnapshot(peerCandRef, snap => {
+            const candUnsubscribe = onSnapshot(peerCandRef, snap => {
                 snap.docChanges().forEach(c => {
                     try {
                         const candidate = new RTCIceCandidate(c.doc.data());
@@ -169,6 +205,7 @@
                     }
                 });
             });
+            peers[peerId].unsubscribers.push(candUnsubscribe);
 
             if (caller) {
                 const offer = await pc.createOffer();
@@ -184,6 +221,12 @@
             unsubscribers.forEach(unsub => unsub());
             unsubscribers = [];
 
+            // Stop screen share if active
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+                screenStream = null;
+            }
+
             // Stop local stream
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
@@ -191,7 +234,12 @@
             }
 
             // Close all peer connections
-            Object.values(peers).forEach(pc => pc.close());
+            Object.values(peers).forEach(pc => {
+                if (pc.unsubscribers) {
+                    pc.unsubscribers.forEach(unsub => unsub());
+                }
+                pc.close();
+            });
             peers = {};
 
             // Remove from Firebase
@@ -200,18 +248,87 @@
 
             // Remove all audio elements
             document.querySelectorAll("audio").forEach(audio => audio.remove());
+            document.getElementById("videos").innerHTML = "";
 
             // Reset UI
             document.getElementById("join").style.display = "inline";
             document.getElementById("leave").style.display = "none";
+            document.getElementById("shareScreen").style.display = "none";
+            document.getElementById("shareScreen").textContent = "Share Screen";
             document.getElementById("roomId").disabled = false;
             document.getElementById("status").textContent = "Left the call";
             
             currentRoomId = null;
         }
 
+        async function toggleScreenShare() {
+            if (screenStream) {
+                // Stop screen sharing
+                screenStream.getTracks().forEach(track => track.stop());
+                screenStream = null;
+                
+                // Remove video track from all peers and renegotiate
+                for (const [peerId, pc] of Object.entries(peers)) {
+                    const senders = pc.getSenders();
+                    const videoSender = senders.find(s => s.track?.kind === "video");
+                    if (videoSender) {
+                        pc.removeTrack(videoSender);
+                        
+                        // Renegotiate
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        const myConnRef = doc(
+                            db, "rooms", currentRoomId, "participants",
+                            userId, "connections", peerId
+                        );
+                        await setDoc(myConnRef, { offer }, { merge: true });
+                    }
+                }
+                
+                document.getElementById("shareScreen").textContent = "Share Screen";
+                document.getElementById("status").textContent = "Stopped screen sharing";
+            } else {
+                // Start screen sharing
+                try {
+                    screenStream = await navigator.mediaDevices.getDisplayMedia({ 
+                        video: true 
+                    });
+                    
+                    const videoTrack = screenStream.getVideoTracks()[0];
+                    
+                    // Add video track to all peers and renegotiate
+                    for (const [peerId, pc] of Object.entries(peers)) {
+                        pc.addTrack(videoTrack, screenStream);
+                        
+                        // Renegotiate
+                        const offer = await pc.createOffer();A
+                        await pc.setLocalDescription(offer);
+                        const myConnRef = doc(
+                            db, "rooms", currentRoomId, "participants",
+                            userId, "connections", peerId
+                        );
+                        await setDoc(myConnRef, { offer }, { merge: true });
+                    }
+                    
+                    // Handle when user stops sharing via browser button
+                    videoTrack.onended = () => {
+                        screenStream = null;
+                        document.getElementById("shareScreen").textContent = "Share Screen";
+                        document.getElementById("status").textContent = "Screen sharing stopped";
+                    };
+                    
+                    document.getElementById("shareScreen").textContent = "Stop Sharing";
+                    document.getElementById("status").textContent = "Sharing screen...";
+                } catch (err) {
+                    console.error("Error sharing screen:", err);
+                    alert("Could not share screen");
+                }
+            }
+        }
+
         document.getElementById("join").onclick = joinRoom;
         document.getElementById("leave").onclick = leaveRoom;
+        document.getElementById("shareScreen").onclick = toggleScreenShare;
     </script>
 </body>
 </html>
