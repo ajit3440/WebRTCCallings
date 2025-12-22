@@ -36,9 +36,10 @@ function initWebSocket() {
   };
 
   ws.onmessage = async (event) => {
-    const message = JSON.parse(event.data);
-
-    switch (message.type) {
+    try {
+      const message = JSON.parse(event.data);
+    
+      switch (message.type) {
       case 'registered':
         myIdElement.textContent = myId;
         break;
@@ -62,6 +63,10 @@ function initWebSocket() {
         await handleIceCandidate(message.data);
         break;
     }
+  } catch (error) {
+    console.error('Error processing WebSocket message:', error);
+    updateStatus('Error processing message', 'error');
+  }
   };
 
   ws.onerror = (error) => {

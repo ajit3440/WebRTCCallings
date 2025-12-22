@@ -7,10 +7,28 @@ const PORT = process.env.PORT || 3000;
 
 // Create HTTP server
 const server = http.createServer((req, res) => {
-  let filePath = '.' + req.url;
-  if (filePath === './') {
-    filePath = './index.html';
+  let filePath = req.url;
+  
+  // Prevent path traversal
+  if (filePath.includes('..') || filePath.includes('%2e')) {
+    res.writeHead(403, { 'Content-Type': 'text/html' });
+    res.end('<h1>403 - Forbidden</h1>', 'utf-8');
+    return;
   }
+  
+  if (filePath === '/') {
+    filePath = '/index.html';
+  }
+  
+  // Only serve specific files
+  const allowedFiles = ['/index.html', '/client.js', '/style.css'];
+  if (!allowedFiles.includes(filePath)) {
+    res.writeHead(404, { 'Content-Type': 'text/html' });
+    res.end('<h1>404 - File Not Found</h1>', 'utf-8');
+    return;
+  }
+  
+  filePath = '.' + filePath;
 
   const extname = String(path.extname(filePath)).toLowerCase();
   const mimeTypes = {
@@ -56,7 +74,10 @@ wss.on('connection', (ws) => {
 
       switch (data.type) {
         case 'register':
-          clientId = data.id;
+          if (!data.id || typeof data.id !== 'string' || data.id.length > 50) {
+            return;
+          }
+          clientId = data.id.replace(/[^a-zA-Z0-9]/g, '');
           clients.set(clientId, ws);
           ws.send(JSON.stringify({ type: 'registered', id: clientId }));
           break;
