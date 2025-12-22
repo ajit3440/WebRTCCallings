@@ -1,151 +1,155 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>Group Voice Call (Firebase)</title>
-  <style>
-    body {
-      background: #0f172a;
-      color: white;
-      font-family: Arial;
-      text-align: center;
-    }
-    button, input {
-      padding: 10px;
-      margin: 5px;
-      font-size: 16px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Group Voice Call</title>
+    <link rel="icon" href="data:,">
 </head>
 
 <body>
-<h2>🎧 Group Voice Call (WebRTC + Firebase)</h2>
+    <h2>Group Voice Call (Firebase + WebRTC)</h2>
 
-<input id="roomId" placeholder="Room ID">
-<br>
+    <input id="roomId" placeholder="Room ID">
+    <button id="join">Join</button>
 
-<button onclick="joinRoom()">Join Voice Call</button>
-<button onclick="leaveRoom()">Leave</button>
+    <script type="module">
+        import { initializeApp } from
+            "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-  import {
-    getFirestore, doc, setDoc, getDocs, onSnapshot,
-    collection, addDoc, deleteDoc
-  } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+        import {
+            getFirestore,
+            doc,
+            setDoc,
+            getDocs,
+            onSnapshot,
+            collection,
+            addDoc
+        } from
+            "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyBRbfuMB_J7ADzWYcnI2UmUmTuLYoY3G6Q",
-    authDomain: "webrtc-a3cd5.firebaseapp.com",
-    projectId: "webrtc-a3cd5",
-    storageBucket: "webrtc-a3cd5.firebasestorage.app",
-    messagingSenderId: "203007627814",
-    appId: "1:203007627814:web:a947bb1227f5e390f78ce7"
-  };
+        const firebaseConfig = {
+            apiKey: "AIzaSyBRbfuMB_J7ADzWYcnI2UmUmTuLYoY3G6Q",
+            authDomain: "webrtc-a3cd5.firebaseapp.com",
+            projectId: "webrtc-a3cd5",
+            storageBucket: "webrtc-a3cd5.firebasestorage.app",
+            messagingSenderId: "203007627814",
+            appId: "1:203007627814:web:a947bb1227f5e390f78ce7"
+        };
 
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
 
-  const userId = crypto.randomUUID();
-  let localStream;
-  let peers = {}; // peerId -> RTCPeerConnection
+        console.log("Firebase loaded successfully");
 
-  const iceServers = {
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-  };
+        const userId = crypto.randomUUID();
+        let localStream;
+        let peers = {};
 
-  async function getAudio() {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: false
-    });
-  }
+        const servers = {
+            iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+        };
 
-  async function createPeer(roomId, peerId, isCaller) {
-    const pc = new RTCPeerConnection(iceServers);
-    peers[peerId] = pc;
+        async function joinRoom() {
+            const roomId = document.getElementById("roomId").value;
+            if (!roomId) return alert("Enter Room ID");
 
-    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-    pc.ontrack = e => {
-      const audio = document.createElement("audio");
-      audio.srcObject = e.streams[0];
-      audio.autoplay = true;
-      document.body.appendChild(audio);
-    };
+            const participantsRef = collection(db, "rooms", roomId, "participants");
+            await setDoc(doc(participantsRef, userId), { joined: Date.now() });
 
-    const connRef = collection(
-      db,
-      "rooms", roomId,
-      "participants", userId,
-      "connections", peerId,
-      "candidates"
-    );
+            const snapshot = await getDocs(participantsRef);
+            snapshot.forEach(p => {
+                if (p.id !== userId) connect(roomId, p.id, true);
+            });
 
-    pc.onicecandidate = e => e.candidate && addDoc(connRef, e.candidate.toJSON());
-
-    if (isCaller) {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      await setDoc(
-        doc(db, "rooms", roomId, "participants", peerId, "connections", userId),
-        { offer }
-      );
-    }
-
-    onSnapshot(
-      collection(db, "rooms", roomId, "participants", peerId, "connections", userId, "candidates"),
-      snap => snap.docChanges().forEach(c =>
-        pc.addIceCandidate(c.doc.data())
-      )
-    );
-
-    onSnapshot(
-      doc(db, "rooms", roomId, "participants", userId, "connections", peerId),
-      async snap => {
-        const data = snap.data();
-        if (data?.offer && !pc.currentRemoteDescription) {
-          await pc.setRemoteDescription(data.offer);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          await setDoc(snap.ref, { answer }, { merge: true });
+            onSnapshot(participantsRef, snap => {
+                snap.docChanges().forEach(c => {
+                    if (c.type === "added" && c.doc.id !== userId) {
+                        connect(roomId, c.doc.id, false);
+                    }
+                });
+            });
         }
-        if (data?.answer && !pc.currentRemoteDescription) {
-          await pc.setRemoteDescription(data.answer);
+
+        async function connect(roomId, peerId, caller) {
+            const pc = new RTCPeerConnection(servers);
+            peers[peerId] = pc;
+
+            localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+            pc.ontrack = e => {
+                const audio = document.createElement("audio");
+                audio.srcObject = e.streams[0];
+                audio.autoplay = true;
+                document.body.appendChild(audio);
+            };
+
+            // My outgoing candidates
+            const myCandRef = collection(
+                db, "rooms", roomId, "participants",
+                userId, "connections", peerId, "candidates"
+            );
+
+            pc.onicecandidate = e =>
+                e.candidate && addDoc(myCandRef, e.candidate.toJSON());
+
+            // My connection document (where I write my offer/answer)
+            const myConnRef = doc(
+                db, "rooms", roomId, "participants",
+                userId, "connections", peerId
+            );
+
+            // Peer's connection document (where I read their offer/answer)
+            const peerConnRef = doc(
+                db, "rooms", roomId, "participants",
+                peerId, "connections", userId
+            );
+
+            // Peer's candidates
+            const peerCandRef = collection(peerConnRef, "candidates");
+
+            // Queue for candidates that arrive before remote description
+            const candidateQueue = [];
+
+            onSnapshot(peerConnRef, async snap => {
+                const data = snap.data();
+                if (data?.offer && !pc.currentRemoteDescription) {
+                    await pc.setRemoteDescription(data.offer);
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    await setDoc(myConnRef, { answer }, { merge: true });
+                    // Add queued candidates
+                    candidateQueue.forEach(c => pc.addIceCandidate(c));
+                    candidateQueue.length = 0;
+                }
+                if (data?.answer && !pc.currentRemoteDescription) {
+                    await pc.setRemoteDescription(data.answer);
+                    // Add queued candidates
+                    candidateQueue.forEach(c => pc.addIceCandidate(c));
+                    candidateQueue.length = 0;
+                }
+            });
+
+            onSnapshot(peerCandRef, snap => {
+                snap.docChanges().forEach(c => {
+                    const candidate = new RTCIceCandidate(c.doc.data());
+                    if (pc.currentRemoteDescription) {
+                        pc.addIceCandidate(candidate);
+                    } else {
+                        candidateQueue.push(candidate);
+                    }
+                });
+            });
+
+            if (caller) {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                await setDoc(myConnRef, { offer });
+            }
         }
-      }
-    );
-  }
 
-  window.joinRoom = async () => {
-    const roomId = document.getElementById("roomId").value;
-    if (!roomId) return alert("Enter room ID");
-
-    await getAudio();
-
-    const participantsRef = collection(db, "rooms", roomId, "participants");
-    await setDoc(doc(participantsRef, userId), { joined: Date.now() });
-
-    const snapshot = await getDocs(participantsRef);
-    snapshot.forEach(p => {
-      if (p.id !== userId) createPeer(roomId, p.id, true);
-    });
-
-    onSnapshot(participantsRef, snap => {
-      snap.docChanges().forEach(c => {
-        if (c.type === "added" && c.doc.id !== userId) {
-          createPeer(roomId, c.doc.id, false);
-        }
-      });
-    });
-  };
-
-  window.leaveRoom = async () => {
-    Object.values(peers).forEach(p => p.close());
-    localStream?.getTracks().forEach(t => t.stop());
-    peers = {};
-  };
-</script>
+        document.getElementById("join").onclick = joinRoom;
+    </script>
 </body>
 </html>
