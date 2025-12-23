@@ -1,231 +1,976 @@
+
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Group Voice Call</title>
-    <link rel="icon" href="data:,">
-</head>
-
-<body>
-    <h2>Group Voice Call (Firebase + WebRTC)</h2>
-
-    <input id="roomId" placeholder="Room ID">
-    <button id="join">Join</button>
-    <button id="leave" style="display:none;">Leave Call</button>
-    <button id="shareScreen" style="display:none;">Share Screen</button>
-    <div id="status"></div>
-    <div id="videos" style="display:flex; flex-wrap:wrap; gap:10px; margin-top:20px;"></div>
-
-    <script type="module">
-        import { initializeApp } from
-            "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-
-        import {
-            getFirestore,
-            doc,
-            setDoc,
-            getDocs,
-            onSnapshot,
-            collection,
-            addDoc
-        } from
-            "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyBRbfuMB_J7ADzWYcnI2UmUmTuLYoY3G6Q",
-            authDomain: "webrtc-a3cd5.firebaseapp.com",
-            projectId: "webrtc-a3cd5",
-            storageBucket: "webrtc-a3cd5.firebasestorage.app",
-            messagingSenderId: "203007627814",
-            appId: "1:203007627814:web:a947bb1227f5e390f78ce7"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
-        console.log("Firebase loaded successfully");
-
-        const userId = crypto.randomUUID();
-        let localStream;
-        let screenStream;
-        let peers = {};
-        let currentRoomId = null;
-        let unsubscribers = [];
-
-        const servers = {
-            iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-        };
-
-        async function joinRoom() {
-            const roomId = document.getElementById("roomId").value;
-            if (!roomId) return alert("Enter Room ID");
-
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            currentRoomId = roomId;
-            
-            document.getElementById("join").style.display = "none";
-            document.getElementById("leave").style.display = "inline";
-            document.getElementById("shareScreen").style.display = "inline";
-            document.getElementById("roomId").disabled = true;
-            document.getElementById("status").textContent = "Connected to room: " + roomId;
-
-            const participantsRef = collection(db, "rooms", roomId, "participants");
-            await setDoc(doc(participantsRef, userId), { joined: Date.now() });
-
-            const snapshot = await getDocs(participantsRef);
-            snapshot.forEach(p => {
-                const data = p.data();
-                if (p.id !== userId && !data.left) {
-                    connect(roomId, p.id, true);
-                }
-            });
-
-            const unsubscribe = onSnapshot(participantsRef, snap => {
-                snap.docChanges().forEach(c => {
-                    if (c.type === "added" && c.doc.id !== userId && !c.doc.data().left) {
-                        connect(roomId, c.doc.id, false);
-                    }
-                    if (c.type === "modified" && c.doc.data().left && peers[c.doc.id]) {
-                        // Peer left, clean up their connection
-                        if (peers[c.doc.id].unsubscribers) {
-                            peers[c.doc.id].unsubscribers.forEach(unsub => unsub());
-                        }
-                        peers[c.doc.id].close();
-                        delete peers[c.doc.id];
-                        // Remove their audio and video elements
-                        const audio = document.getElementById("audio-" + c.doc.id);
-                        const video = document.getElementById("video-" + c.doc.id);
-                        if (audio) audio.remove();
-                        if (video) video.remove();
-                    }
-                });
-            });
-            unsubscribers.push(unsubscribe);
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Motion Voyagers API Tester</title>
+    <!-- SignalR Client Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.0/dist/browser/signalr.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        async function connect(roomId, peerId, caller) {
-            const pc = new RTCPeerConnection(servers);
-            peers[peerId] = pc;
-            peers[peerId].unsubscribers = [];
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
 
-            localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-            if (screenStream) {
-                screenStream.getTracks().forEach(t => pc.addTrack(t, screenStream));
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+            .header h1 {
+                font-size: 2.5em;
+                margin-bottom: 10px;
             }
 
-            pc.ontrack = e => {
-                const stream = e.streams[0];
-                const trackKind = e.track.kind;
-                
-                if (trackKind === "video") {
-                    // Display screen share
-                    let video = document.getElementById("video-" + peerId);
-                    if (!video) {
-                        video = document.createElement("video");
-                        video.id = "video-" + peerId;
-                        video.autoplay = true;
-                        video.style.width = "400px";
-                        video.style.border = "2px solid #333";
-                        document.getElementById("videos").appendChild(video);
-                    }
-                    video.srcObject = stream;
-                } else if (trackKind === "audio") {
-                    // Audio track
-                    let audio = document.getElementById("audio-" + peerId);
-                    if (!audio) {
-                        audio = document.createElement("audio");
-                        audio.id = "audio-" + peerId;
-                        audio.autoplay = true;
-                        document.body.appendChild(audio);
-                    }
-                    if (!audio.srcObject) {
-                        audio.srcObject = stream;
-                    }
+            .header p {
+                opacity: 0.9;
+            }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            background: #f9f9f9;
+        }
+
+            .section h2 {
+                color: #667eea;
+                margin-bottom: 20px;
+                padding-bottom: 10px;
+                border-bottom: 2px solid #667eea;
+            }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+            input:focus, textarea:focus, select:focus {
+                outline: none;
+                border-color: #667eea;
+            }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+
+            button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            }
+
+            button:active {
+                transform: translateY(0);
+            }
+
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background: #f5f5f5;
+            border-left: 4px solid #667eea;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+            .response pre {
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+            }
+
+        .success {
+            border-left-color: #4caf50;
+            background: #e8f5e9;
+        }
+
+        .error {
+            border-left-color: #f44336;
+            background: #ffebee;
+        }
+
+        .token-display {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            word-break: break-all;
+            font-size: 12px;
+        }
+
+            .token-display strong {
+                color: #856404;
+            }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .grid
+
+        {
+            grid-template-columns: 1fr;
+        }
+
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-connected {
+            background: #4caf50;
+        }
+
+        .status-disconnected {
+            background: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Motion Voyagers API Tester</h1>
+            <p>Test all API endpoints used by the MAUI app</p>
+            <p style="margin-top: 10px;">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Base URL: <span id="baseUrlDisplay">https://motionvoyagers.csdevhub.com/</span></span>
+            </p>
+            <div style="margin-top: 10px;">
+                <label style="display: inline; color: white;">API Base URL: </label>
+                <select id="baseUrlSelect" onchange="changeBaseUrl()" style="padding: 5px; border-radius: 5px; border: none;">
+                    <option value="https://motionvoyagers.csdevhub.com/">Production (https://motionvoyagers.csdevhub.com/)</option>
+                    <option value="http://localhost:5299/">Localhost (http://localhost:5299/)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- Token Display -->
+            <div class="token-display" id="tokenDisplay">
+                <strong>Auth Token:</strong> <span id="tokenValue">Not logged in</span>
+                <button onclick="clearToken()" style="float: right; padding: 5px 15px; margin: 0;">Clear Token</button>
+            </div>
+
+            <!-- Authentication Section -->
+            <div class="section">
+                <h2>🔐 Authentication</h2>
+                <div class="grid">
+                    <div>
+                        <h3>Login</h3>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="loginEmail" placeholder="user@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Password:</label>
+                            <input type="password" id="loginPassword" placeholder="Password">
+                        </div>
+                        <button onclick="login()">Login</button>
+                    </div>
+                    <div>
+                        <h3>Register</h3>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="regEmail" placeholder="user@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Display Name:</label>
+                            <input type="text" id="regDisplayName" placeholder="Display Name">
+                        </div>
+                        <div class="form-group">
+                            <label>Password:</label>
+                            <input type="password" id="regPassword" placeholder="Password (min 6 chars)">
+                        </div>
+                        <div class="form-group">
+                            <label>Platform:</label>
+                            <select id="regPlatform">
+                                <option value="android">Android</option>
+                                <option value="windows">Windows</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>reCAPTCHA Token (for testing, use empty or test token):</label>
+                            <input type="text" id="regRecaptcha" placeholder="reCAPTCHA token">
+                        </div>
+                        <button onclick="register()">Register</button>
+                    </div>
+                </div>
+                <div class="grid" style="margin-top: 20px;">
+                    <div>
+                        <h3>Request OTP</h3>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="otpEmail" placeholder="user@example.com">
+                        </div>
+                        <button onclick="requestOtp()">Request OTP</button>
+                    </div>
+                    <div>
+                        <h3>Verify OTP</h3>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="verifyOtpEmail" placeholder="user@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label>OTP Code:</label>
+                            <input type="text" id="verifyOtpCode" placeholder="6-digit code">
+                        </div>
+                        <button onclick="verifyOtp()">Verify OTP</button>
+                    </div>
+                </div>
+                <div class="grid" style="margin-top: 20px;">
+                    <div>
+                        <h3>Forgot Password</h3>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="forgotEmail" placeholder="user@example.com">
+                        </div>
+                        <button onclick="forgotPassword()">Send Reset Link</button>
+                    </div>
+                    <div>
+                        <h3>Get Display Name Data</h3>
+                        <button onclick="getDisplayNameData()">Get Display Names</button>
+                    </div>
+                </div>
+                <div id="authResponse" class="response hidden"></div>
+            </div>
+
+            <!-- Sessions Section -->
+            <div class="section">
+                <h2>📋 Sessions</h2>
+                <div class="grid">
+                    <div>
+                        <h3>Get All Sessions</h3>
+                        <button onclick="getAllSessions()">Get All Sessions</button>
+                    </div>
+                    <div>
+                        <h3>Get Session by ID</h3>
+                        <div class="form-group">
+                            <label>Session ID:</label>
+                            <input type="text" id="sessionId" placeholder="GUID">
+                        </div>
+                        <button onclick="getSessionById()">Get Session</button>
+                    </div>
+                </div>
+                <div class="grid" style="margin-top: 20px;">
+                    <div>
+                        <h3>Create Session</h3>
+                        <div class="form-group">
+                            <label>Session Name:</label>
+                            <input type="text" id="createSessionName" placeholder="Session Name">
+                        </div>
+                        <div class="form-group">
+                            <label>Max Participants:</label>
+                            <input type="number" id="createMaxParticipants" value="8" min="1" max="20">
+                        </div>
+                        <div class="form-group">
+                            <label>Is Public:</label>
+                            <select id="createIsPublic">
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Password (optional):</label>
+                            <input type="password" id="createPassword" placeholder="Leave empty for public">
+                        </div>
+                        <button onclick="createSession()">Create Session</button>
+                    </div>
+                    <div>
+                        <h3>Join Session</h3>
+                        <div class="form-group">
+                            <label>Session ID:</label>
+                            <input type="text" id="joinSessionId" placeholder="GUID">
+                        </div>
+                        <div class="form-group">
+                            <label>Password (if required):</label>
+                            <input type="password" id="joinPassword" placeholder="Leave empty if public">
+                        </div>
+                        <button onclick="joinSession()">Join Session</button>
+                    </div>
+                </div>
+                <div class="grid" style="margin-top: 20px;">
+                    <div>
+                        <h3>Session Actions</h3>
+                        <div class="form-group">
+                            <label>Session ID:</label>
+                            <input type="text" id="actionSessionId" placeholder="GUID">
+                        </div>
+                        <button onclick="startSession()">Start Session</button>
+                        <button onclick="endSession()">End Session</button>
+                        <button onclick="leaveSession()">Leave Session</button>
+                    </div>
+                    <div>
+                        <h3>Lobby Operations</h3>
+                        <div class="form-group">
+                            <label>Session ID:</label>
+                            <input type="text" id="lobbySessionId" placeholder="GUID">
+                        </div>
+                        <button onclick="joinLobby()">Join Lobby</button>
+                        <button onclick="leaveLobby()">Leave Lobby</button>
+                        <button onclick="getLobby()">Get Lobby</button>
+                    </div>
+                </div>
+                <div id="sessionResponse" class="response hidden"></div>
+            </div>
+
+            <!-- WebRTC & Voice Calling Section -->
+            <div class="section">
+                <h2>📞 WebRTC Voice Calling</h2>
+                <div class="form-group">
+                    <label>Session ID (for WebRTC):</label>
+                    <input type="text" id="webrtcSessionId" placeholder="Enter session GUID">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <button onclick="connectVoiceHub()">Connect to Voice Hub</button>
+                    <button onclick="disconnectVoiceHub()">Disconnect</button>
+                    <button onclick="startAudioCapture()">Start Microphone</button>
+                    <button onclick="stopAudioCapture()">Stop Microphone</button>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <strong>Connection Status:</strong> <span id="hubStatus">Disconnected</span><br>
+                    <strong>Connection ID:</strong> <span id="connectionId">-</span><br>
+                    <strong>Participants:</strong> <span id="participantsList">None</span>
+                </div>
+                <div id="webrtcResponse" class="response hidden"></div>
+            </div>
+
+            <!-- Health Check -->
+            <div class="section">
+                <h2>🏥 Health Check</h2>
+                <button onclick="healthCheck()">Check API Health</button>
+                <div id="healthResponse" class="response hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get base URL from localStorage or default to production
+        let BASE_URL = localStorage.getItem('apiBaseUrl') || 'https://motionvoyagers.csdevhub.com/';
+        let authToken = localStorage.getItem('authToken') || '';
+
+        // Update display on load
+        document.getElementById('baseUrlDisplay').textContent = BASE_URL;
+        document.getElementById('baseUrlSelect').value = BASE_URL;
+
+        function changeBaseUrl() {
+            BASE_URL = document.getElementById('baseUrlSelect').value;
+            localStorage.setItem('apiBaseUrl', BASE_URL);
+            document.getElementById('baseUrlDisplay').textContent = BASE_URL;
+            // Clear token when switching URLs (different API = different auth)
+            if (confirm('Switching API URL. Clear saved token?')) {
+                clearToken();
+            }
+        }
+
+        // Update token display on load
+        updateTokenDisplay();
+
+        // Decode JWT token to get user ID
+        function getUserIdFromToken() {
+            if (!authToken) return null;
+            try {
+                const parts = authToken.split('.');
+                if (parts.length !== 3) return null;
+                const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+                return payload.userId || payload.sub || null;
+            } catch (e) {
+                console.error('Error decoding token:', e);
+                return null;
+            }
+        }
+
+        function updateTokenDisplay() {
+            const tokenValue = document.getElementById('tokenValue');
+            const tokenDisplay = document.getElementById('tokenDisplay');
+            if (authToken) {
+                const userId = getUserIdFromToken();
+                const display = userId
+                    ? `User ID: ${userId} | Token: ${authToken.substring(0, 30)}...`
+                    : `Token: ${authToken.substring(0, 50)}...`;
+                tokenValue.textContent = display;
+                tokenDisplay.style.display = 'block';
+            } else {
+                tokenValue.textContent = 'Not logged in';
+                tokenDisplay.style.display = 'block';
+            }
+        }
+
+        function clearToken() {
+            authToken = '';
+            localStorage.removeItem('authToken');
+            updateTokenDisplay();
+            showResponse('authResponse', 'Token cleared', 'success');
+        }
+
+        function getHeaders(includeAuth = true) {
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            if (includeAuth && authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+            return headers;
+        }
+
+        function showResponse(elementId, data, type = '') {
+            const element = document.getElementById(elementId);
+            element.classList.remove('hidden');
+            element.className = `response ${type}`;
+            element.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+
+        async function apiCall(endpoint, method = 'GET', body = null, includeAuth = true, customHeaders = {}) {
+            try {
+                const options = {
+                    method: method,
+                    headers: { ...getHeaders(includeAuth), ...customHeaders }
+                };
+                if (body) {
+                    options.body = JSON.stringify(body);
                 }
+                const response = await fetch(BASE_URL + endpoint, options);
+                const text = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch {
+                    data = text;
+                }
+                return {
+                    status: response.status,
+                    statusText: response.statusText,
+                    data: data,
+                    ok: response.ok
+                };
+            } catch (error) {
+                return {
+                    status: 0,
+                    statusText: 'Network Error',
+                    data: { error: error.message },
+                    ok: false
+                };
+            }
+        }
+
+        // Authentication Functions
+        async function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            if (!email || !password) {
+                showResponse('authResponse', { error: 'Email and password are required' }, 'error');
+                return;
+            }
+            const result = await apiCall('api/Auth/login', 'POST', { Email: email, Password: password }, false);
+            if (result.ok && result.data.token) {
+                authToken = result.data.token;
+                localStorage.setItem('authToken', authToken);
+                updateTokenDisplay();
+                const userId = getUserIdFromToken();
+                showResponse('authResponse', {
+                    ...result.data,
+                    decodedUserId: userId,
+                    message: 'Login successful! Token saved. User ID extracted from token.'
+                }, 'success');
+            } else {
+                showResponse('authResponse', result.data, 'error');
+            }
+        }
+
+        async function register() {
+            const email = document.getElementById('regEmail').value;
+            const displayName = document.getElementById('regDisplayName').value;
+            const password = document.getElementById('regPassword').value;
+            const platform = document.getElementById('regPlatform').value;
+            const recaptcha = document.getElementById('regRecaptcha').value;
+
+            const body = {
+                Email: email,
+                DisplayName: displayName,
+                Password: password,
+                RecaptchaToken: recaptcha || 'test-token',
+                AgreementTimestamp: new Date().toISOString()
             };
 
-            // My outgoing candidates
-            const myCandRef = collection(
-                db, "rooms", roomId, "participants",
-                userId, "connections", peerId, "candidates"
-            );
-
-            pc.onicecandidate = e =>
-                e.candidate && addDoc(myCandRef, e.candidate.toJSON());
-
-            // My connection document (where I write my offer/answer)
-            const myConnRef = doc(
-                db, "rooms", roomId, "participants",
-                userId, "connections", peerId
-            );
-
-            // Peer's connection document (where I read their offer/answer)
-            const peerConnRef = doc(
-                db, "rooms", roomId, "participants",
-                peerId, "connections", userId
-            );
-
-            // Peer's candidates
-            const peerCandRef = collection(peerConnRef, "candidates");
-
-            // Queue for candidates that arrive before remote description
-            const candidateQueue = [];
-
-            const peerUnsubscribe = onSnapshot(peerConnRef, async snap => {
-                const data = snap.data();
-                if (data?.offer && !pc.currentRemoteDescription) {
-                    await pc.setRemoteDescription(data.offer);
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
-                    await setDoc(myConnRef, { answer }, { merge: true });
-                    // Add queued candidates
-                    candidateQueue.forEach(c => pc.addIceCandidate(c));
-                    candidateQueue.length = 0;
-                }
-                if (data?.answer && !pc.currentRemoteDescription) {
-                    await pc.setRemoteDescription(data.answer);
-                    // Add queued candidates
-                    candidateQueue.forEach(c => pc.addIceCandidate(c));
-                    candidateQueue.length = 0;
-                }
+            const result = await apiCall('api/Auth/register', 'POST', body, false, {
+                'X-Platform': platform
             });
-            peers[peerId].unsubscribers.push(peerUnsubscribe);
+            showResponse('authResponse', result.data, result.ok ? 'success' : 'error');
+        }
 
-            const candUnsubscribe = onSnapshot(peerCandRef, snap => {
-                snap.docChanges().forEach(c => {
-                    try {
-                        const candidate = new RTCIceCandidate(c.doc.data());
-                        if (pc.currentRemoteDescription) {
-                            pc.addIceCandidate(candidate);
-                        } else {
-                            candidateQueue.push(candidate);
-                        }
-                    } catch (e) {
-                        console.error("Error adding ICE candidate:", e);
-                    }
-                });
-            });
-            peers[peerId].unsubscribers.push(candUnsubscribe);
+        async function requestOtp() {
+            const email = document.getElementById('otpEmail').value;
+            const result = await apiCall('api/Auth/request-otp', 'POST', { Email: email }, false);
+            showResponse('authResponse', result.data, result.ok ? 'success' : 'error');
+        }
 
-            if (caller) {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                await setDoc(myConnRef, { offer });
+        async function verifyOtp() {
+            const email = document.getElementById('verifyOtpEmail').value;
+            const code = document.getElementById('verifyOtpCode').value;
+            const result = await apiCall('api/Auth/verify-otp', 'POST', { Email: email, Code: code }, false);
+            showResponse('authResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function forgotPassword() {
+            const email = document.getElementById('forgotEmail').value;
+            const result = await apiCall('api/Auth/forgot-password', 'POST', { Email: email }, false);
+            showResponse('authResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function getDisplayNameData() {
+            const result = await apiCall('api/displayname/displaynamedata', 'GET', null, true);
+            showResponse('authResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        // Session Functions
+        async function getAllSessions() {
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            const result = await apiCall('api/sessions', 'GET');
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function getSessionById() {
+            const sessionId = document.getElementById('sessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            const result = await apiCall(`api/sessions/${sessionId}`, 'GET');
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function createSession() {
+            const userId = getUserIdFromToken();
+            if (!userId) {
+                showResponse('sessionResponse', { error: 'Please login first to get user ID from token' }, 'error');
+                return;
+            }
+
+            const sessionName = document.getElementById('createSessionName').value;
+            if (!sessionName) {
+                showResponse('sessionResponse', { error: 'Session name is required' }, 'error');
+                return;
+            }
+
+            const maxParticipants = parseInt(document.getElementById('createMaxParticipants').value);
+            const isPublic = document.getElementById('createIsPublic').value === 'true';
+            const password = document.getElementById('createPassword').value;
+
+            const body = {
+                SessionName: sessionName,
+                MaxParticipants: maxParticipants,
+                IsPublic: isPublic,
+                Password: password || null,
+                HostUserId: userId // Must match the userId in the JWT token
+            };
+
+            const result = await apiCall('api/sessions', 'POST', body);
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function joinSession() {
+            const sessionId = document.getElementById('joinSessionId').value;
+            const password = document.getElementById('joinPassword').value;
+
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+
+            // Join session doesn't need a body - userId comes from JWT token
+            let url = `api/sessions/${sessionId}/join`;
+            if (password) {
+                url += `?password=${encodeURIComponent(password)}`;
+            }
+
+            const result = await apiCall(url, 'POST', null);
+            if (result.ok && result.data) {
+                // Auto-populate WebRTC session ID
+                document.getElementById('webrtcSessionId').value = sessionId;
+                showResponse('sessionResponse', {
+                    ...result.data,
+                    message: 'Session joined! You can now connect to Voice Hub for WebRTC calling.',
+                    webrtcHint: 'Click "Connect to Voice Hub" to start voice calling'
+                }, 'success');
+            } else {
+                showResponse('sessionResponse', result.data, 'error');
             }
         }
 
-        async function leaveRoom() {
-            if (!currentRoomId) return;
-
-            // Unsubscribe from all Firebase listeners
-            unsubscribers.forEach(unsub => unsub());
-            unsubscribers = [];
-
-            // Stop screen share if active
-            if (screenStream) {
-                screenStream.getTracks().forEach(track => track.stop());
-                screenStream = null;
+        async function startSession() {
+            const sessionId = document.getElementById('actionSessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
             }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            // Start session - userId comes from JWT token, only host can start
+            const result = await apiCall(`api/sessions/${sessionId}/start`, 'POST', null);
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function endSession() {
+            const sessionId = document.getElementById('actionSessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            // End session - userId comes from JWT token, only host can end
+            const result = await apiCall(`api/sessions/${sessionId}/end`, 'POST', null);
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function leaveSession() {
+            const sessionId = document.getElementById('actionSessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            // Leave session doesn't need a body - userId comes from JWT token
+            const result = await apiCall(`api/sessions/${sessionId}/leave`, 'POST', null);
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function joinLobby() {
+            const sessionId = document.getElementById('lobbySessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            // Join lobby - userId comes from JWT token
+            const result = await apiCall(`api/sessions/${sessionId}/join-lobby`, 'POST', null);
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function leaveLobby() {
+            const sessionId = document.getElementById('lobbySessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            // Leave lobby - userId comes from JWT token
+            const result = await apiCall(`api/sessions/${sessionId}/leave-lobby`, 'POST', null);
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function getLobby() {
+            const sessionId = document.getElementById('lobbySessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            const result = await apiCall(`api/sessions/${sessionId}/lobby`, 'GET');
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function healthCheck() {
+            const result = await apiCall('health', 'GET', null, false);
+            showResponse('healthResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        // ========== WebRTC & SignalR Functions ==========
+        let voiceHubConnection = null;
+        let localStream = null;
+        let peerConnections = new Map();
+        let localConnectionId = null;
+        let currentSessionId = null;
+
+        const ICE_SERVERS = [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' }
+        ];
+
+        async function connectVoiceHub() {
+            if (!authToken) {
+                showResponse('webrtcResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+
+            const sessionId = document.getElementById('webrtcSessionId').value;
+            if (!sessionId) {
+                showResponse('webrtcResponse', { error: 'Please enter a Session ID' }, 'error');
+                return;
+            }
+
+            try {
+                // SignalR requires token in query string as 'access_token'
+                const hubUrl = BASE_URL.replace(/\/$/, '') + '/hubs/voice';
+                const token = authToken;
+
+                console.log('[SignalR] Connecting to:', hubUrl);
+                console.log('[SignalR] Token length:', token ? token.length : 0);
+
+                voiceHubConnection = new signalR.HubConnectionBuilder()
+                    .withUrl(hubUrl, {
+                        // SignalR will add access_token to query string automatically
+                        accessTokenFactory: () => {
+                            console.log('[SignalR] AccessTokenFactory called');
+                            return token;
+                        },
+                        // Enable WebSockets and LongPolling as fallback
+                        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
+                        // Skip negotiation if WebSocket fails (for debugging)
+                        skipNegotiation: false,
+                        // Don't send credentials in fetch (we're using token in query string)
+                        withCredentials: false
+                    })
+                    .withAutomaticReconnect({
+                        nextRetryDelayInMilliseconds: retryContext => {
+                            // Exponential backoff: 0s, 2s, 10s, 30s then stops
+                            if (retryContext.previousRetryCount === 0) return 0;
+                            if (retryContext.previousRetryCount === 1) return 2000;
+                            if (retryContext.previousRetryCount === 2) return 10000;
+                            return 30000;
+                        }
+                    })
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                // Wire up SignalR event handlers
+                voiceHubConnection.on('ReceiveOffer', async (callerId, offerSdp) => {
+                    console.log('[WebRTC] Received offer from', callerId);
+                    await handleOffer(callerId, offerSdp);
+                });
+
+                voiceHubConnection.on('ReceiveAnswer', async (callerId, answerSdp) => {
+                    console.log('[WebRTC] Received answer from', callerId);
+                    await handleAnswer(callerId, answerSdp);
+                });
+
+                voiceHubConnection.on('ReceiveIceCandidate', (callerId, candidateJson) => {
+                    console.log('[WebRTC] Received ICE candidate from', callerId);
+                    handleIceCandidate(callerId, candidateJson);
+                });
+
+                voiceHubConnection.on('ParticipantJoined', (connectionId) => {
+                    console.log('[WebRTC] Participant joined:', connectionId);
+                    updateParticipantsList();
+                    callUser(connectionId);
+                });
+
+                voiceHubConnection.on('ParticipantLeft', (connectionId) => {
+                    console.log('[WebRTC] Participant left:', connectionId);
+                    closePeerConnection(connectionId);
+                    updateParticipantsList();
+                });
+
+                voiceHubConnection.on('SessionParticipants', (participants) => {
+                    console.log('[WebRTC] Session participants:', participants);
+                    participants.forEach(pid => {
+                        if (pid !== localConnectionId) {
+                            callUser(pid);
+                        }
+                    });
+                    updateParticipantsList();
+                });
+
+                voiceHubConnection.on('SlotGranted', () => {
+                    console.log('[WebRTC] Speaking slot granted');
+                    showResponse('webrtcResponse', { message: 'Speaking slot granted' }, 'success');
+                });
+
+                voiceHubConnection.on('SlotQueued', (position) => {
+                    console.log('[WebRTC] Speaking slot queued, position:', position);
+                    showResponse('webrtcResponse', { message: `Speaking slot queued, position: ${position}` }, 'error');
+                });
+
+                // Handle connection events
+                voiceHubConnection.onclose((error) => {
+                    console.error('[SignalR] Connection closed:', error);
+                    document.getElementById('hubStatus').textContent = 'Disconnected';
+                    if (error) {
+                        showResponse('webrtcResponse', { error: `Connection closed: ${error.message || error}` }, 'error');
+                    }
+                });
+
+                voiceHubConnection.onreconnecting((error) => {
+                    console.log('[SignalR] Reconnecting...', error);
+                    document.getElementById('hubStatus').textContent = 'Reconnecting...';
+                });
+
+                voiceHubConnection.onreconnected((connectionId) => {
+                    console.log('[SignalR] Reconnected:', connectionId);
+                    localConnectionId = connectionId;
+                    document.getElementById('hubStatus').textContent = 'Connected';
+                    document.getElementById('connectionId').textContent = connectionId;
+                });
+
+                // Start connection
+                console.log('[SignalR] Starting connection to:', hubUrl);
+                console.log('[SignalR] Base URL:', BASE_URL);
+                console.log('[SignalR] Full hub URL:', hubUrl);
+
+                // Test if the endpoint is reachable first
+                try {
+                    const testUrl = hubUrl.replace('/hubs/voice', '/health');
+                    const testResponse = await fetch(testUrl);
+                    console.log('[SignalR] Health check result:', testResponse.status);
+                } catch (testError) {
+                    console.warn('[SignalR] Health check failed (may be normal):', testError);
+                }
+
+                await voiceHubConnection.start();
+
+                localConnectionId = voiceHubConnection.connectionId;
+                currentSessionId = sessionId;
+
+                document.getElementById('hubStatus').textContent = 'Connected';
+                document.getElementById('connectionId').textContent = localConnectionId;
+
+                // Join session group
+                console.log('[SignalR] Joining session group:', sessionId);
+                await voiceHubConnection.invoke('JoinSessionGroup', sessionId);
+
+                showResponse('webrtcResponse', {
+                    message: 'Connected to voice hub and joined session group',
+                    connectionId: localConnectionId,
+                    sessionId: sessionId,
+                    hubUrl: hubUrl
+                }, 'success');
+
+            } catch (error) {
+                console.error('[SignalR] Connection error:', error);
+                let errorMessage = error.message || 'Unknown error';
+
+                // Provide more helpful error messages
+                if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+                    errorMessage = 'Network error. Check: 1) API server is running, 2) CORS is enabled, 3) URL is correct, 4) Token is valid';
+                } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+                    errorMessage = 'Authentication failed. Please login again to get a fresh token.';
+                } else if (errorMessage.includes('CORS')) {
+                    errorMessage = 'CORS error. Make sure the API server has CORS enabled for SignalR.';
+                }
+
+                showResponse('webrtcResponse', {
+                    error: errorMessage,
+                    details: error.toString(),
+                    hubUrl: BASE_URL.replace(/\/$/, '') + '/hubs/voice',
+                    hasToken: !!authToken,
+                    tokenLength: authToken ? authToken.length : 0
+                }, 'error');
+                document.getElementById('hubStatus').textContent = 'Connection Failed';
+            }
+        }
+
+        async function disconnectVoiceHub() {
+            if (voiceHubConnection) {
+                if (currentSessionId) {
+                    try {
+                        await voiceHubConnection.invoke('LeaveSessionGroup', currentSessionId);
+                    } catch (e) {
+                        console.error('Error leaving session group:', e);
+                    }
+                }
+                await voiceHubConnection.stop();
+                voiceHubConnection = null;
+            }
+
+            // Close all peer connections
+            peerConnections.forEach((pc, id) => {
+                closePeerConnection(id);
+            });
+            peerConnections.clear();
 
             // Stop local stream
             if (localStream) {
@@ -233,113 +978,177 @@
                 localStream = null;
             }
 
-            // Close all peer connections
-            Object.values(peers).forEach(pc => {
-                if (pc.unsubscribers) {
-                    pc.unsubscribers.forEach(unsub => unsub());
-                }
-                pc.close();
-            });
-            peers = {};
-
-            // Remove from Firebase
-            const participantsRef = collection(db, "rooms", currentRoomId, "participants");
-            await setDoc(doc(participantsRef, userId), { left: Date.now() }, { merge: true });
-
-            // Remove all audio elements
-            document.querySelectorAll("audio").forEach(audio => audio.remove());
-            document.getElementById("videos").innerHTML = "";
-
-            // Reset UI
-            document.getElementById("join").style.display = "inline";
-            document.getElementById("leave").style.display = "none";
-            document.getElementById("shareScreen").style.display = "none";
-            document.getElementById("shareScreen").textContent = "Share Screen";
-            document.getElementById("roomId").disabled = false;
-            document.getElementById("status").textContent = "Left the call";
-            
-            currentRoomId = null;
+            document.getElementById('hubStatus').textContent = 'Disconnected';
+            document.getElementById('connectionId').textContent = '-';
+            document.getElementById('participantsList').textContent = 'None';
+            showResponse('webrtcResponse', { message: 'Disconnected from voice hub' }, 'success');
         }
 
-        async function toggleScreenShare() {
-            if (screenStream) {
-                // Stop screen sharing
-                screenStream.getTracks().forEach(track => track.stop());
-                screenStream = null;
-                
-                // Remove video track from all peers and renegotiate
-                for (const [peerId, pc] of Object.entries(peers)) {
-                    const senders = pc.getSenders();
-                    const videoSender = senders.find(s => s.track?.kind === "video");
-                    if (videoSender) {
-                        pc.removeTrack(videoSender);
-                        
-                        // Renegotiate
-                        const offer = await pc.createOffer();
-                        await pc.setLocalDescription(offer);
-                        const myConnRef = doc(
-                            db, "rooms", currentRoomId, "participants",
-                            userId, "connections", peerId
-                        );
-                        await setDoc(myConnRef, { offer }, { merge: true });
+        async function startAudioCapture() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: false
+                });
+                showResponse('webrtcResponse', { message: 'Microphone access granted' }, 'success');
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                showResponse('webrtcResponse', { error: `Microphone error: ${error.message}` }, 'error');
+            }
+        }
+
+        function stopAudioCapture() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+                showResponse('webrtcResponse', { message: 'Microphone stopped' }, 'success');
+            }
+        }
+
+        async function callUser(targetConnectionId) {
+            if (!localStream) {
+                console.log('[WebRTC] No local stream, requesting microphone...');
+                await startAudioCapture();
+                if (!localStream) return;
+            }
+
+            let pc = peerConnections.get(targetConnectionId);
+            if (!pc || pc.connectionState === 'closed') {
+                pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+                peerConnections.set(targetConnectionId, pc);
+
+                // Add local stream tracks
+                localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, localStream);
+                });
+
+                // Handle remote stream
+                pc.ontrack = (event) => {
+                    console.log('[WebRTC] Received remote track from', targetConnectionId);
+                    const audio = new Audio();
+                    audio.srcObject = event.streams[0];
+                    audio.play().catch(e => console.error('Error playing audio:', e));
+                };
+
+                // Handle ICE candidates
+                pc.onicecandidate = (event) => {
+                    if (event.candidate && voiceHubConnection) {
+                        const candidateJson = JSON.stringify({
+                            candidate: event.candidate.candidate,
+                            sdpMLineIndex: event.candidate.sdpMLineIndex,
+                            sdpMid: event.candidate.sdpMid
+                        });
+                        voiceHubConnection.invoke('SendIceCandidate', targetConnectionId, candidateJson)
+                            .catch(e => console.error('Error sending ICE candidate:', e));
                     }
-                }
-                
-                document.getElementById("shareScreen").textContent = "Share Screen";
-                document.getElementById("status").textContent = "Stopped screen sharing";
-            } else {
-                // Start screen sharing
+                };
+
+                // Handle connection state changes
+                pc.onconnectionstatechange = () => {
+                    console.log(`[WebRTC] Connection state with ${targetConnectionId}: ${pc.connectionState}`);
+                };
+
+                // Create and send offer
                 try {
-                    screenStream = await navigator.mediaDevices.getDisplayMedia({ 
-                        video: true 
-                    });
-                    
-                    const videoTrack = screenStream.getVideoTracks()[0];
-                    
-                    // Add video track to all peers and renegotiate
-                    for (const [peerId, pc] of Object.entries(peers)) {
-                        pc.addTrack(videoTrack, screenStream);
-                        
-                        // Renegotiate
-                        const offer = await pc.createOffer();
-                        await pc.setLocalDescription(offer);
-                        const myConnRef = doc(
-                            db, "rooms", currentRoomId, "participants",
-                            userId, "connections", peerId
-                        );
-                        await setDoc(myConnRef, { offer }, { merge: true });
-                    }
-                    
-                    // Handle when user stops sharing via browser button
-                    videoTrack.onended = () => {
-                        screenStream = null;
-                        document.getElementById("shareScreen").textContent = "Share Screen";
-                        document.getElementById("status").textContent = "Screen sharing stopped";
-                    };
-                    
-                    document.getElementById("shareScreen").textContent = "Stop Sharing";
-                    document.getElementById("status").textContent = "Sharing screen...";
-                } catch (err) {
-                    console.error("Error sharing screen:", err);
-                    let errorMsg = "Could not share screen. ";
-                    if (err.name === "NotAllowedError") {
-                        errorMsg += "Permission denied.";
-                    } else if (err.name === "NotSupportedError") {
-                        errorMsg += "Screen sharing not supported. Use HTTPS or localhost.";
-                    } else if (err.name === "NotFoundError") {
-                        errorMsg += "No screen available to share.";
-                    } else {
-                        errorMsg += err.message || "Unknown error.";
-                    }
-                    alert(errorMsg);
-                    document.getElementById("status").textContent = errorMsg;
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    await voiceHubConnection.invoke('SendOffer', targetConnectionId, offer.sdp);
+                    console.log('[WebRTC] Offer sent to', targetConnectionId);
+                } catch (error) {
+                    console.error('[WebRTC] Error creating offer:', error);
                 }
             }
         }
 
-        document.getElementById("join").onclick = joinRoom;
-        document.getElementById("leave").onclick = leaveRoom;
-        document.getElementById("shareScreen").onclick = toggleScreenShare;
+        async function handleOffer(callerId, offerSdp) {
+            if (!localStream) {
+                await startAudioCapture();
+                if (!localStream) return;
+            }
+
+            let pc = peerConnections.get(callerId);
+            if (!pc || pc.connectionState === 'closed') {
+                pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+                peerConnections.set(callerId, pc);
+
+                localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, localStream);
+                });
+
+                pc.ontrack = (event) => {
+                    console.log('[WebRTC] Received remote track from', callerId);
+                    const audio = new Audio();
+                    audio.srcObject = event.streams[0];
+                    audio.play().catch(e => console.error('Error playing audio:', e));
+                };
+
+                pc.onicecandidate = (event) => {
+                    if (event.candidate && voiceHubConnection) {
+                        const candidateJson = JSON.stringify({
+                            candidate: event.candidate.candidate,
+                            sdpMLineIndex: event.candidate.sdpMLineIndex,
+                            sdpMid: event.candidate.sdpMid
+                        });
+                        voiceHubConnection.invoke('SendIceCandidate', callerId, candidateJson)
+                            .catch(e => console.error('Error sending ICE candidate:', e));
+                    }
+                };
+
+                peerConnections.set(callerId, pc);
+            }
+
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                await voiceHubConnection.invoke('SendAnswer', callerId, answer.sdp);
+                console.log('[WebRTC] Answer sent to', callerId);
+            } catch (error) {
+                console.error('[WebRTC] Error handling offer:', error);
+            }
+        }
+
+        async function handleAnswer(callerId, answerSdp) {
+            const pc = peerConnections.get(callerId);
+            if (pc) {
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: answerSdp }));
+                    console.log('[WebRTC] Answer processed for', callerId);
+                } catch (error) {
+                    console.error('[WebRTC] Error handling answer:', error);
+                }
+            }
+        }
+
+        function handleIceCandidate(callerId, candidateJson) {
+            const pc = peerConnections.get(callerId);
+            if (pc) {
+                try {
+                    const candidate = JSON.parse(candidateJson);
+                    pc.addIceCandidate(new RTCIceCandidate(candidate))
+                        .catch(e => console.error('Error adding ICE candidate:', e));
+                } catch (error) {
+                    console.error('[WebRTC] Error parsing ICE candidate:', error);
+                }
+            }
+        }
+
+        function closePeerConnection(connectionId) {
+            const pc = peerConnections.get(connectionId);
+            if (pc) {
+                pc.close();
+                peerConnections.delete(connectionId);
+            }
+        }
+
+        function updateParticipantsList() {
+            if (!voiceHubConnection) {
+                document.getElementById('participantsList').textContent = 'None';
+                return;
+            }
+            const list = Array.from(peerConnections.keys()).filter(id => id !== localConnectionId);
+            document.getElementById('participantsList').textContent = list.length > 0 ? list.join(', ') : 'None';
+        }
     </script>
 </body>
 </html>
