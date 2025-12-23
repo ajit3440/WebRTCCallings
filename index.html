@@ -161,12 +161,19 @@
             <div class="section">
                 <h2>🎵 Music (mix with microphone)</h2>
                 <div class="form-group">
-                    <label>Track</label>
+                    <label>Track (hotlink-friendly samples)</label>
                     <select id="musicTrack">
-                        <option value="https://cdn.pixabay.com/download/audio/2021/10/20/audio_33a9878011.mp3?filename=acoustic-vibes-1194.mp3">🎵 Acoustic Vibes</option>
-                        <option value="https://cdn.pixabay.com/download/audio/2022/03/15/audio_2c2cfb0687.mp3?filename=chill-abstract-intention-12099.mp3">🎵 Chillhop</option>
-                        <option value="https://cdn.pixabay.com/download/audio/2023/01/02/audio_1b1c3a1c6f.mp3?filename=synthwave-157530.mp3">🎵 Synthwave</option>
+                        <option value="https://cdn.jsdelivr.net/npm/test-audio@2.1.0/audio/8000__cfork__cf-fx-bloibb.mp3">🎵 FX Bloibb (mp3)</option>
+                        <option value="https://cdn.jsdelivr.net/npm/test-audio@2.1.0/audio/75344__neotone__drip2.wav">🎵 Drip2 (wav)</option>
+                        <option value="https://cdn.jsdelivr.net/npm/test-audio@2.1.0/audio/50775__smcameron__drips2.ogg">🎵 Drips2 (ogg)</option>
+                        <option value="https://file-examples.com/storage/fe51d49f91f03a7b6ee546f/2017/11/file_example_MP3_5MG.mp3">🎵 Long Track 1 (~5MB mp3)</option>
+                        <option value="https://file-examples.com/storage/fe51d49f91f03a7b6ee546f/2017/11/file_example_MP3_2MG.mp3">🎵 Long Track 2 (~2MB mp3)</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label>Or upload an mp3</label>
+                    <input type="file" id="musicUpload" accept="audio/mpeg,audio/mp3,audio/*" />
+                    <button onclick="useUploadedMusic()">Use Upload</button>
                 </div>
                 <div>
                     <button onclick="startMusic()">Play with Mic</button>
@@ -263,6 +270,7 @@
         let musicDest = null;
         let mixedStream = null;
         let isMusicActive = false;
+        let uploadedMusicUrl = null;
 
         const ICE_SERVERS = [
             { urls: 'stun:stun.l.google.com:19302' },
@@ -494,7 +502,7 @@
             }
 
             if (!musicAudio) musicAudio = document.getElementById('musicAudio');
-            const url = document.getElementById('musicTrack').value;
+            const url = uploadedMusicUrl || document.getElementById('musicTrack').value;
             musicAudio.src = url;
 
             if (!musicCtx) musicCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -534,6 +542,22 @@
             mixedStream = null;
             if (localStream) applyStreamToPeers(localStream);
             showResponse('musicResponse', { message: 'Music stopped, mic only' }, 'success');
+        }
+
+        function useUploadedMusic() {
+            hideResponse('musicResponse');
+            const fileInput = document.getElementById('musicUpload');
+            if (!fileInput.files || fileInput.files.length === 0) {
+                showResponse('musicResponse', { error: 'Choose an mp3 file first' }, 'error');
+                return;
+            }
+            const file = fileInput.files[0];
+            // Revoke previous object URL
+            if (uploadedMusicUrl && uploadedMusicUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(uploadedMusicUrl);
+            }
+            uploadedMusicUrl = URL.createObjectURL(file);
+            showResponse('musicResponse', { message: `Loaded upload: ${file.name}` }, 'success');
         }
 
         function init() {
