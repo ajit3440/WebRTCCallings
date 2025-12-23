@@ -1,276 +1,796 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
+<html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Motion Voyagers - Login & Voice Call</title>
+    <title>Motion Voyagers API Tester</title>
+    <!-- SignalR Client Library -->
     <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.0/dist/browser/signalr.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }
+
         .container {
-            max-width: 900px;
+            max-width: 1200px;
             margin: 0 auto;
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
             overflow: hidden;
         }
+
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 24px;
+            padding: 30px;
             text-align: center;
         }
-        .header h1 { font-size: 2rem; margin-bottom: 8px; }
-        .content { padding: 24px; }
+
+            .header h1 {
+                font-size: 2.5em;
+                margin-bottom: 10px;
+            }
+
+            .header p {
+                opacity: 0.9;
+            }
+
+        .content {
+            padding: 30px;
+        }
+
         .section {
-            margin-bottom: 20px;
-            border: 1px solid #e5e7eb;
+            margin-bottom: 30px;
+            border: 2px solid #e0e0e0;
             border-radius: 10px;
             padding: 20px;
-            background: #f9fafb;
+            background: #f9f9f9;
         }
-        .section h2 {
-            color: #4f46e5;
-            margin-bottom: 16px;
-            border-bottom: 2px solid #e5e7eb;
-            padding-bottom: 8px;
+
+            .section h2 {
+                color: #667eea;
+                margin-bottom: 20px;
+                padding-bottom: 10px;
+                border-bottom: 2px solid #667eea;
+            }
+
+        .form-group {
+            margin-bottom: 15px;
         }
-        .form-group { margin-bottom: 14px; }
-        label { display: block; margin-bottom: 6px; font-weight: 600; color: #374151; }
-        input, select {
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input, textarea, select {
             width: 100%;
-            padding: 10px;
-            border: 2px solid #e5e7eb;
-            border-radius: 6px;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
             font-size: 14px;
+            transition: border-color 0.3s;
         }
-        input:focus, select:focus { outline: none; border-color: #6366f1; }
+
+            input:focus, textarea:focus, select:focus {
+                outline: none;
+                border-color: #667eea;
+            }
+
         button {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #fff;
+            color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
+            padding: 12px 30px;
+            border-radius: 5px;
             cursor: pointer;
-            font-size: 15px;
+            font-size: 16px;
             font-weight: 600;
-            margin-right: 8px;
-            margin-top: 8px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 10px;
+            margin-top: 10px;
         }
-        button:hover { opacity: 0.95; }
+
+            button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            }
+
+            button:active {
+                transform: translateY(0);
+            }
+
         .response {
-            margin-top: 16px;
-            padding: 12px;
-            border-radius: 6px;
-            border-left: 4px solid #4f46e5;
-            background: #eef2ff;
-            font-family: monospace;
-            font-size: 12px;
-            white-space: pre-wrap;
-            word-break: break-word;
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background: #f5f5f5;
+            border-left: 4px solid #667eea;
+            max-height: 400px;
+            overflow-y: auto;
         }
-        .hidden { display: none; }
+
+            .response pre {
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+            }
+
+        .success {
+            border-left-color: #4caf50;
+            background: #e8f5e9;
+        }
+
+        .error {
+            border-left-color: #f44336;
+            background: #ffebee;
+        }
+
         .token-display {
-            background: #fff7ed;
-            border: 1px solid #fdba74;
+            background: #fff3cd;
+            border: 1px solid #ffc107;
             padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 16px;
+            border-radius: 5px;
+            margin-bottom: 20px;
             word-break: break-all;
             font-size: 12px;
         }
-        .subnote { font-size: 12px; color: #6b7280; margin-top: 6px; }
-        .status {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
-            margin-top: 8px;
+
+            .token-display strong {
+                color: #856404;
+            }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
         }
-        .pill {
-            padding: 6px 10px;
-            border-radius: 999px;
-            background: #eef2ff;
-            color: #312e81;
-            font-size: 12px;
+
+        @media (max-width: 768px) {
+            .grid
+
+        {
+            grid-template-columns: 1fr;
+        }
+
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-connected {
+            background: #4caf50;
+        }
+
+        .status-disconnected {
+            background: #f44336;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 Motion Voyagers</h1>
-            <p>Login and WebRTC Voice Calling</p>
+            <h1>🚀 Motion Voyagers API Tester</h1>
+            <p>Test all API endpoints used by the MAUI app</p>
+            <p style="margin-top: 10px;">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Base URL: <span id="baseUrlDisplay">https://motionvoyagers.csdevhub.com/</span></span>
+            </p>
             <div style="margin-top: 10px;">
-                <label style="color: #e0e7ff; font-weight: 600;">API Base URL:</label>
-                <select id="baseUrlSelect" onchange="changeBaseUrl()" style="padding: 6px; border-radius: 6px; border: none;">
-                    <option value="https://motionvoyagers.csdevhub.com/">Production</option>
-                    <option value="http://localhost:5299/">Localhost</option>
+                <label style="display: inline; color: white;">API Base URL: </label>
+                <select id="baseUrlSelect" onchange="changeBaseUrl()" style="padding: 5px; border-radius: 5px; border: none;">
+                    <option value="https://motionvoyagers.csdevhub.com/">Production (https://motionvoyagers.csdevhub.com/)</option>
+                    <option value="http://localhost:5299/">Localhost (http://localhost:5299/)</option>
                 </select>
-                <div class="pill" id="baseUrlDisplay"></div>
             </div>
         </div>
 
         <div class="content">
-            <div class="token-display" id="tokenDisplay">
-                <strong>Auth Token:</strong> <span id="tokenValue">Not logged in</span>
-                <button onclick="clearToken()" style="float: right; padding: 4px 10px; margin: 0;">Clear</button>
+            <!-- Token Display -->
+            <div class="token-display" id="tokenDisplay" style="display: block;">
+                <strong>Auth Token:</strong> <span id="tokenValue">User ID: 9c32f221-b31a-4ed1-a04c-3b41d7bee786 | Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...</span>
+                <button onclick="clearToken()" style="float: right; padding: 5px 15px; margin: 0;">Clear Token</button>
             </div>
 
+            <!-- Authentication Section -->
             <div class="section">
-                <h2>🔐 Login</h2>
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" id="loginEmail" placeholder="user@example.com">
+                <h2>🔐 Authentication</h2>
+                <div class="grid">
+                    <div>
+                        <h3>Login</h3>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="loginEmail" placeholder="user@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Password:</label>
+                            <input type="password" id="loginPassword" placeholder="Password">
+                        </div>
+                        <button onclick="login()">Login</button>
+                    </div>
+                    <div>
+                        <h3>Register</h3>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="regEmail" placeholder="user@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Display Name:</label>
+                            <input type="text" id="regDisplayName" placeholder="Display Name">
+                        </div>
+                        <div class="form-group">
+                            <label>Password:</label>
+                            <input type="password" id="regPassword" placeholder="Password (min 6 chars)">
+                        </div>
+                        <div class="form-group">
+                            <label>Platform:</label>
+                            <select id="regPlatform">
+                                <option value="android">Android</option>
+                                <option value="windows">Windows</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>reCAPTCHA Token (for testing, use empty or test token):</label>
+                            <input type="text" id="regRecaptcha" placeholder="reCAPTCHA token">
+                        </div>
+                        <button onclick="register()">Register</button>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Password</label>
-                    <input type="password" id="loginPassword" placeholder="Password">
+                <div class="grid" style="margin-top: 20px;">
+                    <div>
+                        <h3>Request OTP</h3>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="otpEmail" placeholder="user@example.com">
+                        </div>
+                        <button onclick="requestOtp()">Request OTP</button>
+                    </div>
+                    <div>
+                        <h3>Verify OTP</h3>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="verifyOtpEmail" placeholder="user@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label>OTP Code:</label>
+                            <input type="text" id="verifyOtpCode" placeholder="6-digit code">
+                        </div>
+                        <button onclick="verifyOtp()">Verify OTP</button>
+                    </div>
                 </div>
-                <button onclick="login()">Login</button>
-                <div id="authResponse" class="response hidden"></div>
+                <div class="grid" style="margin-top: 20px;">
+                    <div>
+                        <h3>Forgot Password</h3>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="forgotEmail" placeholder="user@example.com">
+                        </div>
+                        <button onclick="forgotPassword()">Send Reset Link</button>
+                    </div>
+                    <div>
+                        <h3>Get Display Name Data</h3>
+                        <button onclick="getDisplayNameData()">Get Display Names</button>
+                    </div>
+                </div>
+                <div id="authResponse" class="response success"><pre>{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBaml0c2hhcm1hQGNzc29mdHNvbHV0aW9ucy5jb20iLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoiQWppdHNoYXJtYUBjc3NvZnRzb2x1dGlvbnMuY29tIiwidXNlcklkIjoiOWMzMmYyMjEtYjMxYS00ZWQxLWEwNGMtM2I0MWQ3YmVlNzg2IiwiZXhwIjoxODI5NTQ5NzA3fQ.l6DX7k3qXK1rKyJoy8d7IVmrCDltO0qOschz-oZgDh0",
+  "user": {
+    "id": "9c32f221-b31a-4ed1-a04c-3b41d7bee786",
+    "displayName": "SupremeStones78",
+    "email": "Ajitsharma@cssoftsolutions.com",
+    "emailVerified": true,
+    "emailVerifiedUtc": "2025-12-17T11:29:06.550876Z",
+    "weightKg": null,
+    "heightCm": null,
+    "maxHeartRate": null,
+    "functionalThresholdPower": null,
+    "createdUtc": "2025-12-17T11:28:14.8483Z",
+    "updatedUtc": null
+  },
+  "decodedUserId": "9c32f221-b31a-4ed1-a04c-3b41d7bee786",
+  "message": "Login successful! Token saved. User ID extracted from token."
+}</pre></div>
             </div>
 
+            <!-- Sessions Section -->
+            <div class="section">
+                <h2>📋 Sessions</h2>
+                <div class="grid">
+                    <div>
+                        <h3>Get All Sessions</h3>
+                        <button onclick="getAllSessions()">Get All Sessions</button>
+                    </div>
+                    <div>
+                        <h3>Get Session by ID</h3>
+                        <div class="form-group">
+                            <label>Session ID:</label>
+                            <input type="text" id="sessionId" placeholder="GUID">
+                        </div>
+                        <button onclick="getSessionById()">Get Session</button>
+                    </div>
+                </div>
+                <div class="grid" style="margin-top: 20px;">
+                    <div>
+                        <h3>Create Session</h3>
+                        <div class="form-group">
+                            <label>Session Name:</label>
+                            <input type="text" id="createSessionName" placeholder="Session Name">
+                        </div>
+                        <div class="form-group">
+                            <label>Max Participants:</label>
+                            <input type="number" id="createMaxParticipants" value="8" min="1" max="20">
+                        </div>
+                        <div class="form-group">
+                            <label>Is Public:</label>
+                            <select id="createIsPublic">
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Password (optional):</label>
+                            <input type="password" id="createPassword" placeholder="Leave empty for public">
+                        </div>
+                        <button onclick="createSession()">Create Session</button>
+                    </div>
+                    <div>
+                        <h3>Join Session</h3>
+                        <div class="form-group">
+                            <label>Session ID:</label>
+                            <input type="text" id="joinSessionId" placeholder="GUID">
+                        </div>
+                        <div class="form-group">
+                            <label>Password (if required):</label>
+                            <input type="password" id="joinPassword" placeholder="Leave empty if public">
+                        </div>
+                        <button onclick="joinSession()">Join Session</button>
+                    </div>
+                </div>
+                <div class="grid" style="margin-top: 20px;">
+                    <div>
+                        <h3>Session Actions</h3>
+                        <div class="form-group">
+                            <label>Session ID:</label>
+                            <input type="text" id="actionSessionId" placeholder="GUID">
+                        </div>
+                        <button onclick="startSession()">Start Session</button>
+                        <button onclick="endSession()">End Session</button>
+                        <button onclick="leaveSession()">Leave Session</button>
+                    </div>
+                    <div>
+                        <h3>Lobby Operations</h3>
+                        <div class="form-group">
+                            <label>Session ID:</label>
+                            <input type="text" id="lobbySessionId" placeholder="GUID">
+                        </div>
+                        <button onclick="joinLobby()">Join Lobby</button>
+                        <button onclick="leaveLobby()">Leave Lobby</button>
+                        <button onclick="getLobby()">Get Lobby</button>
+                    </div>
+                </div>
+                <div id="sessionResponse" class="response hidden"></div>
+            </div>
+
+            <!-- WebRTC & Voice Calling Section -->
             <div class="section">
                 <h2>📞 WebRTC Voice Calling</h2>
                 <div class="form-group">
-                    <label>Session ID</label>
-                    <input type="text" id="webrtcSessionId" placeholder="GUID">
+                    <label>Session ID (for WebRTC):</label>
+                    <input type="text" id="webrtcSessionId" placeholder="Enter session GUID">
                 </div>
-                <div>
-                    <button onclick="connectVoiceHub()">Connect</button>
+                <div style="margin-bottom: 15px;">
+                    <button onclick="connectVoiceHub()">Connect to Voice Hub</button>
                     <button onclick="disconnectVoiceHub()">Disconnect</button>
                     <button onclick="startAudioCapture()">Start Microphone</button>
                     <button onclick="stopAudioCapture()">Stop Microphone</button>
                 </div>
-                <div class="status">
-                    <span class="pill">Status: <span id="hubStatus">Disconnected</span></span>
-                    <span class="pill">Connection ID: <span id="connectionId">-</span></span>
-                    <span class="pill">Participants: <span id="participantsList">None</span></span>
+                <div style="margin-bottom: 15px;">
+                    <strong>Connection Status:</strong> <span id="hubStatus">Connected</span><br>
+                    <strong>Connection ID:</strong> <span id="connectionId">W5ZBASEdmk6v1MPtGHV7LA</span><br>
+                    <strong>Participants:</strong> <span id="participantsList">BUmIir15ZNifwVgRfeeHLA, HgSh8UOZxFe3DWo4AM0ymA, 9lGpBNVrDa5jKpdrX5VfNw, Bw4veGKv_LXTlpILOJGO4w, dj_anUlYdMpUcGX8AACpEA, On0Et4KNoheGS1r4_3SISA, BdYPixqUuEQn5uD1QKgC8g, 3lckCJkAEkm78oWXjYpLng, sWUam1AO1YIfROskTqSxTA, j6HZ_MN2NJstv0NUDRt03g, 47VBEMiY0KbPe59EmPbE0Q, -Xt-TSufqMnTgnpuuyarrg, CGlEuN_B3sILowgi5ZKRWQ, Mxz0-AJjLApzD97ZH3RSlg, MYznFIgzxPA5xAS1LkgwDw</span>
                 </div>
-                <div id="webrtcResponse" class="response hidden"></div>
+                <div id="webrtcResponse" class="response success"><pre>{
+  "message": "Connected to voice hub and joined session group",
+  "connectionId": "W5ZBASEdmk6v1MPtGHV7LA",
+  "sessionId": "6103d991-d154-4e78-b1ed-95acfa1b91e5",
+  "hubUrl": "https://motionvoyagers.csdevhub.com/hubs/voice"
+}</pre></div>
             </div>
 
+            <!-- Health Check -->
             <div class="section">
-                <h2>🎵 Music (mix with microphone)</h2>
-                <div class="form-group">
-                    <label>Track (hotlink-friendly samples)</label>
-                    <select id="musicTrack">
-                        <option value="https://cdn.jsdelivr.net/npm/test-audio@2.1.0/audio/8000__cfork__cf-fx-bloibb.mp3">🎵 FX Bloibb (mp3)</option>
-                        <option value="https://cdn.jsdelivr.net/npm/test-audio@2.1.0/audio/75344__neotone__drip2.wav">🎵 Drip2 (wav)</option>
-                        <option value="https://cdn.jsdelivr.net/npm/test-audio@2.1.0/audio/50775__smcameron__drips2.ogg">🎵 Drips2 (ogg)</option>
-                        <option value="https://file-examples.com/storage/fe51d49f91f03a7b6ee546f/2017/11/file_example_MP3_5MG.mp3">🎵 Long Track 1 (~5MB mp3)</option>
-                        <option value="https://file-examples.com/storage/fe51d49f91f03a7b6ee546f/2017/11/file_example_MP3_2MG.mp3">🎵 Long Track 2 (~2MB mp3)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Or upload an mp3</label>
-                    <input type="file" id="musicUpload" accept="audio/mpeg,audio/mp3,audio/*" />
-                    <button onclick="useUploadedMusic()">Use Upload</button>
-                </div>
-                <div>
-                    <button onclick="startMusic()">Play with Mic</button>
-                    <button onclick="stopMusic()">Stop Music</button>
-                </div>
-                <p class="subnote">Music is mixed into your microphone stream and sent to the call.</p>
-                <div id="musicResponse" class="response hidden"></div>
-                <audio id="musicAudio" crossorigin="anonymous"></audio>
+                <h2>🏥 Health Check</h2>
+                <button onclick="healthCheck()">Check API Health</button>
+                <div id="healthResponse" class="response hidden"></div>
             </div>
         </div>
     </div>
 
     <script>
-        const STORAGE_KEYS = { token: 'mv_api_token', baseUrl: 'mv_api_base_url' };
-        const BASE_URLS = { prod: 'https://motionvoyagers.csdevhub.com/', local: 'http://localhost:5299/' };
-        let BASE_URL = localStorage.getItem(STORAGE_KEYS.baseUrl) || BASE_URLS.prod;
-        let authToken = localStorage.getItem(STORAGE_KEYS.token) || '';
+        // Get base URL from localStorage or default to production
+        let BASE_URL = localStorage.getItem('apiBaseUrl') || 'https://motionvoyagers.csdevhub.com/';
+        let authToken = localStorage.getItem('authToken') || '';
+
+        // Update display on load
+        document.getElementById('baseUrlDisplay').textContent = BASE_URL;
+        document.getElementById('baseUrlSelect').value = BASE_URL;
 
         function changeBaseUrl() {
-            const select = document.getElementById('baseUrlSelect');
-            BASE_URL = select.value;
-            localStorage.setItem(STORAGE_KEYS.baseUrl, BASE_URL);
+            BASE_URL = document.getElementById('baseUrlSelect').value;
+            localStorage.setItem('apiBaseUrl', BASE_URL);
             document.getElementById('baseUrlDisplay').textContent = BASE_URL;
+            // Clear token when switching URLs (different API = different auth)
+            if (confirm('Switching API URL. Clear saved token?')) {
+                clearToken();
+            }
         }
 
-        function showResponse(elementId, data, type = 'success') {
-            const el = document.getElementById(elementId);
-            el.className = `response ${type}`;
-            el.textContent = JSON.stringify(data, null, 2);
-            el.classList.remove('hidden');
+        // Update token display on load
+        updateTokenDisplay();
+
+        // Decode JWT token to get user ID
+        function getUserIdFromToken() {
+            if (!authToken) return null;
+            try {
+                const parts = authToken.split('.');
+                if (parts.length !== 3) return null;
+                const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+                return payload.userId || payload.sub || null;
+            } catch (e) {
+                console.error('Error decoding token:', e);
+                return null;
+            }
         }
 
-        function hideResponse(elementId) {
-            document.getElementById(elementId).classList.add('hidden');
-        }
-
-        function getAuthHeaders() {
-            const headers = { 'Content-Type': 'application/json' };
-            if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
-            return headers;
-        }
-
-        function saveToken(token) {
-            authToken = token;
-            localStorage.setItem(STORAGE_KEYS.token, token);
-            updateTokenDisplay();
+        function updateTokenDisplay() {
+            const tokenValue = document.getElementById('tokenValue');
+            const tokenDisplay = document.getElementById('tokenDisplay');
+            if (authToken) {
+                const userId = getUserIdFromToken();
+                const display = userId
+                    ? `User ID: ${userId} | Token: ${authToken.substring(0, 30)}...`
+                    : `Token: ${authToken.substring(0, 50)}...`;
+                tokenValue.textContent = display;
+                tokenDisplay.style.display = 'block';
+            } else {
+                tokenValue.textContent = 'Not logged in';
+                tokenDisplay.style.display = 'block';
+            }
         }
 
         function clearToken() {
             authToken = '';
-            localStorage.removeItem(STORAGE_KEYS.token);
+            localStorage.removeItem('authToken');
             updateTokenDisplay();
+            showResponse('authResponse', 'Token cleared', 'success');
         }
 
-        function updateTokenDisplay() {
-            document.getElementById('tokenValue').textContent = authToken || 'Not logged in';
+        function getHeaders(includeAuth = true) {
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            if (includeAuth && authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+            return headers;
         }
 
-        async function apiCall(endpoint, method = 'GET', body = null, authRequired = true) {
-            const url = BASE_URL.replace(/\/$/, '') + '/' + endpoint.replace(/^\//, '');
-            const options = { method, headers: getAuthHeaders() };
-            if (body) options.body = JSON.stringify(body);
-            if (!authRequired) delete options.headers['Authorization'];
+        function showResponse(elementId, data, type = '') {
+            const element = document.getElementById(elementId);
+            element.classList.remove('hidden');
+            element.className = `response ${type}`;
+            element.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
 
+        async function apiCall(endpoint, method = 'GET', body = null, includeAuth = true, customHeaders = {}) {
             try {
-                const response = await fetch(url, options);
-                const data = await response.json().catch(() => ({}));
-                return { ok: response.ok, status: response.status, data };
-            } catch (err) {
-                return { ok: false, status: 0, data: { error: err.message } };
+                const options = {
+                    method: method,
+                    headers: { ...getHeaders(includeAuth), ...customHeaders }
+                };
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+                const response = await fetch(BASE_URL + endpoint, options);
+                const text = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch {
+                    data = text;
+                }
+                return {
+                    status: response.status,
+                    statusText: response.statusText,
+                    data: data,
+                    ok: response.ok
+                };
+            } catch (error) {
+                return {
+                    status: 0,
+                    statusText: 'Network Error',
+                    data: { error: error.message },
+                    ok: false
+                };
             }
         }
 
+        // Authentication Functions
         async function login() {
-            const email = document.getElementById('loginEmail').value.trim();
+            const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
             if (!email || !password) {
                 showResponse('authResponse', { error: 'Email and password are required' }, 'error');
                 return;
             }
-            const result = await apiCall('api/Auth/login', 'POST', { email, password }, false);
-            showResponse('authResponse', result.data, result.ok ? 'success' : 'error');
-            if (result.ok && result.data?.token) saveToken(result.data.token);
+            const result = await apiCall('api/Auth/login', 'POST', { Email: email, Password: password }, false);
+            if (result.ok && result.data.token) {
+                authToken = result.data.token;
+                localStorage.setItem('authToken', authToken);
+                updateTokenDisplay();
+                const userId = getUserIdFromToken();
+                showResponse('authResponse', {
+                    ...result.data,
+                    decodedUserId: userId,
+                    message: 'Login successful! Token saved. User ID extracted from token.'
+                }, 'success');
+            } else {
+                showResponse('authResponse', result.data, 'error');
+            }
         }
 
-        // ========== WebRTC & SignalR ==========
+        async function register() {
+            const email = document.getElementById('regEmail').value;
+            const displayName = document.getElementById('regDisplayName').value;
+            const password = document.getElementById('regPassword').value;
+            const platform = document.getElementById('regPlatform').value;
+            const recaptcha = document.getElementById('regRecaptcha').value;
+
+            const body = {
+                Email: email,
+                DisplayName: displayName,
+                Password: password,
+                RecaptchaToken: recaptcha || 'test-token',
+                AgreementTimestamp: new Date().toISOString()
+            };
+
+            const result = await apiCall('api/Auth/register', 'POST', body, false, {
+                'X-Platform': platform
+            });
+            showResponse('authResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function requestOtp() {
+            const email = document.getElementById('otpEmail').value;
+            const result = await apiCall('api/Auth/request-otp', 'POST', { Email: email }, false);
+            showResponse('authResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function verifyOtp() {
+            const email = document.getElementById('verifyOtpEmail').value;
+            const code = document.getElementById('verifyOtpCode').value;
+            const result = await apiCall('api/Auth/verify-otp', 'POST', { Email: email, Code: code }, false);
+            showResponse('authResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function forgotPassword() {
+            const email = document.getElementById('forgotEmail').value;
+            const result = await apiCall('api/Auth/forgot-password', 'POST', { Email: email }, false);
+            showResponse('authResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function getDisplayNameData() {
+            const result = await apiCall('api/displayname/displaynamedata', 'GET', null, true);
+            showResponse('authResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        // Session Functions
+        async function getAllSessions() {
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            const result = await apiCall('api/sessions', 'GET');
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function getSessionById() {
+            const sessionId = document.getElementById('sessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            const result = await apiCall(`api/sessions/${sessionId}`, 'GET');
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function createSession() {
+            const userId = getUserIdFromToken();
+            if (!userId) {
+                showResponse('sessionResponse', { error: 'Please login first to get user ID from token' }, 'error');
+                return;
+            }
+
+            const sessionName = document.getElementById('createSessionName').value;
+            if (!sessionName) {
+                showResponse('sessionResponse', { error: 'Session name is required' }, 'error');
+                return;
+            }
+
+            const maxParticipants = parseInt(document.getElementById('createMaxParticipants').value);
+            const isPublic = document.getElementById('createIsPublic').value === 'true';
+            const password = document.getElementById('createPassword').value;
+
+            const body = {
+                SessionName: sessionName,
+                MaxParticipants: maxParticipants,
+                IsPublic: isPublic,
+                Password: password || null,
+                HostUserId: userId // Must match the userId in the JWT token
+            };
+
+            const result = await apiCall('api/sessions', 'POST', body);
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function joinSession() {
+            const sessionId = document.getElementById('joinSessionId').value;
+            const password = document.getElementById('joinPassword').value;
+
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+
+            // Join session doesn't need a body - userId comes from JWT token
+            let url = `api/sessions/${sessionId}/join`;
+            if (password) {
+                url += `?password=${encodeURIComponent(password)}`;
+            }
+
+            const result = await apiCall(url, 'POST', null);
+            if (result.ok && result.data) {
+                // Auto-populate WebRTC session ID
+                document.getElementById('webrtcSessionId').value = sessionId;
+                showResponse('sessionResponse', {
+                    ...result.data,
+                    message: 'Session joined! You can now connect to Voice Hub for WebRTC calling.',
+                    webrtcHint: 'Click "Connect to Voice Hub" to start voice calling'
+                }, 'success');
+            } else {
+                showResponse('sessionResponse', result.data, 'error');
+            }
+        }
+
+        async function startSession() {
+            const sessionId = document.getElementById('actionSessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            // Start session - userId comes from JWT token, only host can start
+            const result = await apiCall(`api/sessions/${sessionId}/start`, 'POST', null);
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function endSession() {
+            const sessionId = document.getElementById('actionSessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            // End session - userId comes from JWT token, only host can end
+            const result = await apiCall(`api/sessions/${sessionId}/end`, 'POST', null);
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function leaveSession() {
+            const sessionId = document.getElementById('actionSessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            // Leave session doesn't need a body - userId comes from JWT token
+            const result = await apiCall(`api/sessions/${sessionId}/leave`, 'POST', null);
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function joinLobby() {
+            const sessionId = document.getElementById('lobbySessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            // Join lobby - userId comes from JWT token
+            const result = await apiCall(`api/sessions/${sessionId}/join-lobby`, 'POST', null);
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function leaveLobby() {
+            const sessionId = document.getElementById('lobbySessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            // Leave lobby - userId comes from JWT token
+            const result = await apiCall(`api/sessions/${sessionId}/leave-lobby`, 'POST', null);
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function getLobby() {
+            const sessionId = document.getElementById('lobbySessionId').value;
+            if (!sessionId) {
+                showResponse('sessionResponse', { error: 'Session ID is required' }, 'error');
+                return;
+            }
+            if (!authToken) {
+                showResponse('sessionResponse', { error: 'Please login first' }, 'error');
+                return;
+            }
+            const result = await apiCall(`api/sessions/${sessionId}/lobby`, 'GET');
+            showResponse('sessionResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        async function healthCheck() {
+            const result = await apiCall('health', 'GET', null, false);
+            showResponse('healthResponse', result.data, result.ok ? 'success' : 'error');
+        }
+
+        // ========== WebRTC & SignalR Functions ==========
         let voiceHubConnection = null;
         let localStream = null;
         let peerConnections = new Map();
         let localConnectionId = null;
         let currentSessionId = null;
-        let musicAudio = null;
-        let musicCtx = null;
-        let musicDest = null;
-        let mixedStream = null;
-        let isMusicActive = false;
-        let uploadedMusicUrl = null;
 
         const ICE_SERVERS = [
             { urls: 'stun:stun.l.google.com:19302' },
@@ -281,94 +801,222 @@
         ];
 
         async function connectVoiceHub() {
-            hideResponse('webrtcResponse');
             if (!authToken) {
                 showResponse('webrtcResponse', { error: 'Please login first' }, 'error');
                 return;
             }
-            const sessionId = document.getElementById('webrtcSessionId').value.trim();
+
+            const sessionId = document.getElementById('webrtcSessionId').value;
             if (!sessionId) {
                 showResponse('webrtcResponse', { error: 'Please enter a Session ID' }, 'error');
                 return;
             }
 
             try {
+                // SignalR requires token in query string as 'access_token'
                 const hubUrl = BASE_URL.replace(/\/$/, '') + '/hubs/voice';
+                const token = authToken;
+
+                console.log('[SignalR] Connecting to:', hubUrl);
+                console.log('[SignalR] Token length:', token ? token.length : 0);
+
                 voiceHubConnection = new signalR.HubConnectionBuilder()
                     .withUrl(hubUrl, {
-                        accessTokenFactory: () => authToken,
+                        // SignalR will add access_token to query string automatically
+                        accessTokenFactory: () => {
+                            console.log('[SignalR] AccessTokenFactory called');
+                            return token;
+                        },
+                        // Enable WebSockets and LongPolling as fallback
                         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
+                        // Skip negotiation if WebSocket fails (for debugging)
                         skipNegotiation: false,
+                        // Don't send credentials in fetch (we're using token in query string)
                         withCredentials: false
                     })
-                    .withAutomaticReconnect()
+                    .withAutomaticReconnect({
+                        nextRetryDelayInMilliseconds: retryContext => {
+                            // Exponential backoff: 0s, 2s, 10s, 30s then stops
+                            if (retryContext.previousRetryCount === 0) return 0;
+                            if (retryContext.previousRetryCount === 1) return 2000;
+                            if (retryContext.previousRetryCount === 2) return 10000;
+                            return 30000;
+                        }
+                    })
                     .configureLogging(signalR.LogLevel.Information)
                     .build();
 
-                voiceHubConnection.on('ReceiveOffer', async (callerId, offerSdp) => { await handleOffer(callerId, offerSdp); });
-                voiceHubConnection.on('ReceiveAnswer', async (callerId, answerSdp) => { await handleAnswer(callerId, answerSdp); });
-                voiceHubConnection.on('ReceiveIceCandidate', (callerId, candidateJson) => { handleIceCandidate(callerId, candidateJson); });
-                voiceHubConnection.on('ParticipantJoined', (connectionId) => { updateParticipantsList(); callUser(connectionId); });
-                voiceHubConnection.on('ParticipantLeft', (connectionId) => { closePeerConnection(connectionId); updateParticipantsList(); });
-                voiceHubConnection.on('SessionParticipants', (participants) => {
-                    participants.forEach(pid => { if (pid !== localConnectionId) callUser(pid); });
+                // Wire up SignalR event handlers
+                voiceHubConnection.on('ReceiveOffer', async (callerId, offerSdp) => {
+                    console.log('[WebRTC] Received offer from', callerId);
+                    await handleOffer(callerId, offerSdp);
+                });
+
+                voiceHubConnection.on('ReceiveAnswer', async (callerId, answerSdp) => {
+                    console.log('[WebRTC] Received answer from', callerId);
+                    await handleAnswer(callerId, answerSdp);
+                });
+
+                voiceHubConnection.on('ReceiveIceCandidate', (callerId, candidateJson) => {
+                    console.log('[WebRTC] Received ICE candidate from', callerId);
+                    handleIceCandidate(callerId, candidateJson);
+                });
+
+                voiceHubConnection.on('ParticipantJoined', (connectionId) => {
+                    console.log('[WebRTC] Participant joined:', connectionId);
+                    updateParticipantsList();
+                    callUser(connectionId);
+                });
+
+                voiceHubConnection.on('ParticipantLeft', (connectionId) => {
+                    console.log('[WebRTC] Participant left:', connectionId);
+                    closePeerConnection(connectionId);
                     updateParticipantsList();
                 });
 
-                voiceHubConnection.onclose((error) => {
-                    document.getElementById('hubStatus').textContent = 'Disconnected';
-                    if (error) showResponse('webrtcResponse', { error: error.message || error }, 'error');
+                voiceHubConnection.on('SessionParticipants', (participants) => {
+                    console.log('[WebRTC] Session participants:', participants);
+                    participants.forEach(pid => {
+                        if (pid !== localConnectionId) {
+                            callUser(pid);
+                        }
+                    });
+                    updateParticipantsList();
                 });
 
+                voiceHubConnection.on('SlotGranted', () => {
+                    console.log('[WebRTC] Speaking slot granted');
+                    showResponse('webrtcResponse', { message: 'Speaking slot granted' }, 'success');
+                });
+
+                voiceHubConnection.on('SlotQueued', (position) => {
+                    console.log('[WebRTC] Speaking slot queued, position:', position);
+                    showResponse('webrtcResponse', { message: `Speaking slot queued, position: ${position}` }, 'error');
+                });
+
+                // Handle connection events
+                voiceHubConnection.onclose((error) => {
+                    console.error('[SignalR] Connection closed:', error);
+                    document.getElementById('hubStatus').textContent = 'Disconnected';
+                    if (error) {
+                        showResponse('webrtcResponse', { error: `Connection closed: ${error.message || error}` }, 'error');
+                    }
+                });
+
+                voiceHubConnection.onreconnecting((error) => {
+                    console.log('[SignalR] Reconnecting...', error);
+                    document.getElementById('hubStatus').textContent = 'Reconnecting...';
+                });
+
+                voiceHubConnection.onreconnected((connectionId) => {
+                    console.log('[SignalR] Reconnected:', connectionId);
+                    localConnectionId = connectionId;
+                    document.getElementById('hubStatus').textContent = 'Connected';
+                    document.getElementById('connectionId').textContent = connectionId;
+                });
+
+                // Start connection
+                console.log('[SignalR] Starting connection to:', hubUrl);
+                console.log('[SignalR] Base URL:', BASE_URL);
+                console.log('[SignalR] Full hub URL:', hubUrl);
+
+                // Test if the endpoint is reachable first
+                try {
+                    const testUrl = hubUrl.replace('/hubs/voice', '/health');
+                    const testResponse = await fetch(testUrl);
+                    console.log('[SignalR] Health check result:', testResponse.status);
+                } catch (testError) {
+                    console.warn('[SignalR] Health check failed (may be normal):', testError);
+                }
+
                 await voiceHubConnection.start();
+
                 localConnectionId = voiceHubConnection.connectionId;
                 currentSessionId = sessionId;
+
                 document.getElementById('hubStatus').textContent = 'Connected';
                 document.getElementById('connectionId').textContent = localConnectionId;
 
+                // Join session group
+                console.log('[SignalR] Joining session group:', sessionId);
                 await voiceHubConnection.invoke('JoinSessionGroup', sessionId);
 
-                showResponse('webrtcResponse', { message: 'Connected to voice hub', sessionId, connectionId: localConnectionId }, 'success');
+                showResponse('webrtcResponse', {
+                    message: 'Connected to voice hub and joined session group',
+                    connectionId: localConnectionId,
+                    sessionId: sessionId,
+                    hubUrl: hubUrl
+                }, 'success');
+
             } catch (error) {
-                showResponse('webrtcResponse', { error: error.message || error }, 'error');
+                console.error('[SignalR] Connection error:', error);
+                let errorMessage = error.message || 'Unknown error';
+
+                // Provide more helpful error messages
+                if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+                    errorMessage = 'Network error. Check: 1) API server is running, 2) CORS is enabled, 3) URL is correct, 4) Token is valid';
+                } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+                    errorMessage = 'Authentication failed. Please login again to get a fresh token.';
+                } else if (errorMessage.includes('CORS')) {
+                    errorMessage = 'CORS error. Make sure the API server has CORS enabled for SignalR.';
+                }
+
+                showResponse('webrtcResponse', {
+                    error: errorMessage,
+                    details: error.toString(),
+                    hubUrl: BASE_URL.replace(/\/$/, '') + '/hubs/voice',
+                    hasToken: !!authToken,
+                    tokenLength: authToken ? authToken.length : 0
+                }, 'error');
                 document.getElementById('hubStatus').textContent = 'Connection Failed';
             }
         }
 
         async function disconnectVoiceHub() {
-            hideResponse('webrtcResponse');
             if (voiceHubConnection) {
                 if (currentSessionId) {
-                    try { await voiceHubConnection.invoke('LeaveSessionGroup', currentSessionId); } catch {}
+                    try {
+                        await voiceHubConnection.invoke('LeaveSessionGroup', currentSessionId);
+                    } catch (e) {
+                        console.error('Error leaving session group:', e);
+                    }
                 }
-                try { await voiceHubConnection.stop(); } catch {}
+                await voiceHubConnection.stop();
                 voiceHubConnection = null;
             }
-            peerConnections.forEach((pc, id) => closePeerConnection(id));
+
+            // Close all peer connections
+            peerConnections.forEach((pc, id) => {
+                closePeerConnection(id);
+            });
             peerConnections.clear();
-            if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+
+            // Stop local stream
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+
             document.getElementById('hubStatus').textContent = 'Disconnected';
             document.getElementById('connectionId').textContent = '-';
             document.getElementById('participantsList').textContent = 'None';
-            showResponse('webrtcResponse', { message: 'Disconnected' }, 'success');
+            showResponse('webrtcResponse', { message: 'Disconnected from voice hub' }, 'success');
         }
 
         async function startAudioCapture() {
-            hideResponse('webrtcResponse');
-            // If music is active, stop it first
-            if (isMusicActive) {
-                stopMusic();
-            }
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                showResponse('webrtcResponse', { message: 'Microphone ready' }, 'success');
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: false
+                });
+                showResponse('webrtcResponse', { message: 'Microphone access granted' }, 'success');
             } catch (error) {
+                console.error('Error accessing microphone:', error);
                 showResponse('webrtcResponse', { error: `Microphone error: ${error.message}` }, 'error');
             }
         }
 
         function stopAudioCapture() {
-            hideResponse('webrtcResponse');
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
                 localStream = null;
@@ -376,31 +1024,32 @@
             }
         }
 
-        function getOutgoingStream() {
-            if (isMusicActive && mixedStream) return mixedStream;
-            return localStream;
-        }
-
         async function callUser(targetConnectionId) {
-            let streamToUse = getOutgoingStream();
-            if (!streamToUse) {
+            if (!localStream) {
+                console.log('[WebRTC] No local stream, requesting microphone...');
                 await startAudioCapture();
-                streamToUse = getOutgoingStream();
-                if (!streamToUse) return;
+                if (!localStream) return;
             }
+
             let pc = peerConnections.get(targetConnectionId);
             if (!pc || pc.connectionState === 'closed') {
                 pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
                 peerConnections.set(targetConnectionId, pc);
 
-                streamToUse.getTracks().forEach(track => pc.addTrack(track, streamToUse));
+                // Add local stream tracks
+                localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, localStream);
+                });
 
+                // Handle remote stream
                 pc.ontrack = (event) => {
+                    console.log('[WebRTC] Received remote track from', targetConnectionId);
                     const audio = new Audio();
                     audio.srcObject = event.streams[0];
-                    audio.play().catch(() => {});
+                    audio.play().catch(e => console.error('Error playing audio:', e));
                 };
 
+                // Handle ICE candidates
                 pc.onicecandidate = (event) => {
                     if (event.candidate && voiceHubConnection) {
                         const candidateJson = JSON.stringify({
@@ -408,36 +1057,50 @@
                             sdpMLineIndex: event.candidate.sdpMLineIndex,
                             sdpMid: event.candidate.sdpMid
                         });
-                        voiceHubConnection.invoke('SendIceCandidate', targetConnectionId, candidateJson).catch(() => {});
+                        voiceHubConnection.invoke('SendIceCandidate', targetConnectionId, candidateJson)
+                            .catch(e => console.error('Error sending ICE candidate:', e));
                     }
                 };
 
+                // Handle connection state changes
+                pc.onconnectionstatechange = () => {
+                    console.log(`[WebRTC] Connection state with ${targetConnectionId}: ${pc.connectionState}`);
+                };
+
+                // Create and send offer
                 try {
                     const offer = await pc.createOffer();
                     await pc.setLocalDescription(offer);
                     await voiceHubConnection.invoke('SendOffer', targetConnectionId, offer.sdp);
-                } catch {}
+                    console.log('[WebRTC] Offer sent to', targetConnectionId);
+                } catch (error) {
+                    console.error('[WebRTC] Error creating offer:', error);
+                }
             }
         }
 
         async function handleOffer(callerId, offerSdp) {
-            let streamToUse = getOutgoingStream();
-            if (!streamToUse) {
+            if (!localStream) {
                 await startAudioCapture();
-                streamToUse = getOutgoingStream();
-                if (!streamToUse) return;
+                if (!localStream) return;
             }
 
             let pc = peerConnections.get(callerId);
             if (!pc || pc.connectionState === 'closed') {
                 pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
                 peerConnections.set(callerId, pc);
-                streamToUse.getTracks().forEach(track => pc.addTrack(track, streamToUse));
+
+                localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, localStream);
+                });
+
                 pc.ontrack = (event) => {
+                    console.log('[WebRTC] Received remote track from', callerId);
                     const audio = new Audio();
                     audio.srcObject = event.streams[0];
-                    audio.play().catch(() => {});
+                    audio.play().catch(e => console.error('Error playing audio:', e));
                 };
+
                 pc.onicecandidate = (event) => {
                     if (event.candidate && voiceHubConnection) {
                         const candidateJson = JSON.stringify({
@@ -445,129 +1108,67 @@
                             sdpMLineIndex: event.candidate.sdpMLineIndex,
                             sdpMid: event.candidate.sdpMid
                         });
-                        voiceHubConnection.invoke('SendIceCandidate', callerId, candidateJson).catch(() => {});
+                        voiceHubConnection.invoke('SendIceCandidate', callerId, candidateJson)
+                            .catch(e => console.error('Error sending ICE candidate:', e));
                     }
                 };
+
+                peerConnections.set(callerId, pc);
             }
 
             try {
-                await pc.setRemoteDescription({ type: 'offer', sdp: offerSdp });
+                await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
                 await voiceHubConnection.invoke('SendAnswer', callerId, answer.sdp);
-            } catch {}
+                console.log('[WebRTC] Answer sent to', callerId);
+            } catch (error) {
+                console.error('[WebRTC] Error handling offer:', error);
+            }
         }
 
         async function handleAnswer(callerId, answerSdp) {
             const pc = peerConnections.get(callerId);
-            if (!pc) return;
-            try { await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp }); } catch {}
+            if (pc) {
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: answerSdp }));
+                    console.log('[WebRTC] Answer processed for', callerId);
+                } catch (error) {
+                    console.error('[WebRTC] Error handling answer:', error);
+                }
+            }
         }
 
         function handleIceCandidate(callerId, candidateJson) {
             const pc = peerConnections.get(callerId);
-            if (!pc) return;
-            try { pc.addIceCandidate(JSON.parse(candidateJson)).catch(() => {}); } catch {}
+            if (pc) {
+                try {
+                    const candidate = JSON.parse(candidateJson);
+                    pc.addIceCandidate(new RTCIceCandidate(candidate))
+                        .catch(e => console.error('Error adding ICE candidate:', e));
+                } catch (error) {
+                    console.error('[WebRTC] Error parsing ICE candidate:', error);
+                }
+            }
         }
 
         function closePeerConnection(connectionId) {
             const pc = peerConnections.get(connectionId);
             if (pc) {
-                pc.getSenders().forEach(sender => sender.track?.stop());
                 pc.close();
                 peerConnections.delete(connectionId);
             }
         }
 
         function updateParticipantsList() {
-            const participants = Array.from(peerConnections.keys());
-            document.getElementById('participantsList').textContent = participants.length ? participants.join(', ') : 'None';
-        }
-
-        function applyStreamToPeers(stream) {
-            peerConnections.forEach(pc => {
-                const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
-                if (sender && stream.getAudioTracks().length > 0) {
-                    sender.replaceTrack(stream.getAudioTracks()[0]).catch(() => {});
-                }
-            });
-        }
-
-        async function startMusic() {
-            hideResponse('musicResponse');
-            // Stop mic while music plays
-            if (localStream) {
-                localStream.getTracks().forEach(t => t.stop());
-                localStream = null;
-            }
-
-            if (!musicAudio) musicAudio = document.getElementById('musicAudio');
-            const url = uploadedMusicUrl || document.getElementById('musicTrack').value;
-            musicAudio.src = url;
-
-            if (!musicCtx) musicCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (!musicDest) musicDest = musicCtx.createMediaStreamDestination();
-
-            // Build mixer: music only
-            let musicSource;
-            try {
-                musicSource = musicCtx.createMediaElementSource(musicAudio);
-            } catch (e) {
-                // if already created, reuse
-                musicSource = musicAudio._sourceNode;
-            }
-            if (!musicAudio._sourceNode) musicAudio._sourceNode = musicSource;
-
-            musicSource.connect(musicDest);
-            musicSource.connect(musicCtx.destination);
-
-            mixedStream = musicDest.stream;
-            isMusicActive = true;
-
-            await musicAudio.play().catch(err => {
-                showResponse('musicResponse', { error: `Play blocked: ${err.message}` }, 'error');
-            });
-
-            applyStreamToPeers(mixedStream);
-            showResponse('musicResponse', { message: 'Music mixed with mic and sent to call' }, 'success');
-        }
-
-        function stopMusic() {
-            hideResponse('musicResponse');
-            if (musicAudio) {
-                musicAudio.pause();
-                musicAudio.currentTime = 0;
-            }
-            isMusicActive = false;
-            mixedStream = null;
-            if (localStream) applyStreamToPeers(localStream);
-            showResponse('musicResponse', { message: 'Music stopped, mic only' }, 'success');
-        }
-
-        function useUploadedMusic() {
-            hideResponse('musicResponse');
-            const fileInput = document.getElementById('musicUpload');
-            if (!fileInput.files || fileInput.files.length === 0) {
-                showResponse('musicResponse', { error: 'Choose an mp3 file first' }, 'error');
+            if (!voiceHubConnection) {
+                document.getElementById('participantsList').textContent = 'None';
                 return;
             }
-            const file = fileInput.files[0];
-            // Revoke previous object URL
-            if (uploadedMusicUrl && uploadedMusicUrl.startsWith('blob:')) {
-                URL.revokeObjectURL(uploadedMusicUrl);
-            }
-            uploadedMusicUrl = URL.createObjectURL(file);
-            showResponse('musicResponse', { message: `Loaded upload: ${file.name}` }, 'success');
+            const list = Array.from(peerConnections.keys()).filter(id => id !== localConnectionId);
+            document.getElementById('participantsList').textContent = list.length > 0 ? list.join(', ') : 'None';
         }
-
-        function init() {
-            document.getElementById('baseUrlSelect').value = BASE_URL;
-            document.getElementById('baseUrlDisplay').textContent = BASE_URL;
-            updateTokenDisplay();
-        }
-
-        window.onload = init;
     </script>
-</body>
-</html>
 
+
+</body></html>
